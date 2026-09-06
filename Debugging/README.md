@@ -1,43 +1,60 @@
-# Don't Melt 프로젝트 디버깅 기록
+# Don't Melt — Debugging \& Verification
 
-이 폴더는 오류 코드 중심 TIL이 아니라 **Don't Melt 프로젝트에서 수행한 런타임 검증, 구조 점검, 회귀 테스트, 성능 점검 기록**을 모은 문서다.
+Don't Melt에서 발생한 오류와 구조 검증 항목을 정리한 기록입니다.
 
-기록을 다음 세 종류로 구분한다.
+이 폴더의 목적은 오류 메시지를 모으는 것이 아니라 **재현 → 관찰 → 원인 후보 → 검증 → 해결/판정 → 회귀 확인**의 과정을 남기는 것입니다.
+
+## Record Policy
+
+* 실제 발생한 문제와 예방적 점검을 구분합니다.
+* 발생하지 않은 오류를 경험한 것처럼 작성하지 않습니다.
+* 측정하지 않은 성능 수치를 만들지 않습니다.
+* 네트워크 문제는 우선 `Owner / Authority / Lifetime / Replication Scope`를 확인합니다.
+* 수정 후 동일 조건에서 다시 재현하여 Regression 여부를 확인합니다.
+
+\---
+
+## 1\. Replication / Match Flow
+
+* `01 Replication 등록 누락 가능성 점검`
+* `02 Match Phase Client Replication 점검`
+* `03 Match Flow Console Command 점검`
+* `04 Listen Server 종료 후 Client 복귀`
+* `05 Delegate 중복 등록 Regression Test`
+
+## 2\. Authority / State Ownership
+
+* `06 Server Authority 위반 가능성 점검`
+* `07 GameMode / GameState 상태 중복 점검`
+* `08 PlayerState / Character 데이터 중복 점검`
+* `09 Component 상태 중복 소유 점검`
+* `10 Enum / GameplayTag 상태 중복 점검`
+* `11 Movement State / Action State 충돌 점검`
+* `12 UI / Gameplay State 불일치 점검`
+
+## 3\. Structure / Performance Review
+
+* `13 불필요한 Tick 점검`
+* `14 반복 탐색 성능 점검`
+* `15 불필요한 Replication 비용 점검`
+* `16 Logging Utility 추상화 검토`
+
+> 개별 파일명은 저장소의 실제 문서명을 기준으로 유지합니다. 파일명을 변경하지 않고 이 README를 목차로 사용합니다.
+
+\---
+
+## Debugging Checklist
+
+문제를 만났을 때 다음 순서로 확인합니다.
 
 ```text
-실제 검증
-→ 실제 로그/명령/시나리오가 남아 있는 항목
-
-회귀 테스트
-→ 재발 방지를 위해 정의한 반복 검증 시나리오
-
-구조/성능 점검
-→ 실제 버그 발생을 주장하지 않고 잠재적 불일치·비용을 예방하기 위한 점검 기록
+1. 재현 조건을 고정한다.
+2. 실제 로그 / 증상을 기록한다.
+3. 정상 동작과 현재 동작의 차이를 정의한다.
+4. State Owner와 Authority를 확인한다.
+5. Lifetime과 Replication Scope를 확인한다.
+6. 원인 후보를 하나씩 제거한다.
+7. 수정 후 같은 조건으로 재검증한다.
+8. 재발 가능성이 있으면 Regression 항목으로 남긴다.
 ```
 
-## 문서 목록
-
-1. Replication 등록 누락 점검
-2. Match Phase Client Replication 검증
-3. Match Flow Console Command 검증
-4. Listen Server 종료 후 Client 복귀 검증
-5. Delegate 중복 등록 Regression Test
-6. Server Authority 위반 점검
-7. GameMode / GameState 상태 중복 점검
-8. PlayerState / Character 데이터 중복 점검
-9. Component 간 동일 상태 중복 저장 점검
-10. Enum / Gameplay Tag 동일 상태 중복 점검
-11. Movement State / Action State 충돌 점검
-12. UI / Gameplay State 불일치 점검
-13. 불필요한 Tick 사용 점검
-14. 불필요한 반복문 / 반복 탐색 성능 점검
-15. 불필요한 Replication 비용 점검
-16. Logging Utility 과도한 추상화 여부 점검
-
-## 작성 원칙
-
-- 실제 발생하지 않은 오류를 발생 사례처럼 쓰지 않는다.
-- Raw Log가 없으면 구체적인 수치나 결과를 만들지 않는다.
-- 예방성 검토는 `점검 기록`으로 명시한다.
-- 구조 문제는 `State Owner / Authority / Lifetime / Replication Scope`를 기준으로 좁힌다.
-- 성능 문제는 측정값이 있을 때만 개선 효과를 주장한다.
