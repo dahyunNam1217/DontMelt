@@ -55,9 +55,14 @@ For each task report:
 8. Approval required
 
 ## Documentation
-- Read Docs/Architecture.md when it exists.
-- Read Docs/GameplayRules.md when it exists.
-- Read Docs/NetworkPolicy.md when it exists.
-- Read relevant feature specifications when they exist.
+- Resolve these paths from the project root (`DontMelt/`), not this module directory.
+- Read the root `AGENTS.md` and `CodexContext/README.md` first.
+- Read `CodexContext/ProjectOverview.md`, `CodexContext/Architecture.md`, `CodexContext/GameplayRules.md`, and `CodexContext/NetworkPolicy.md`.
+- Read `CodexContext/ImplementationStatus.md`; distinguish its historical ZIP record from its Git-baseline analysis.
+- Read relevant specifications in `CodexContext/FeatureSpecs/`.
+- Consult `Docs/Design/`, `Docs/Technical/`, and relevant `Docs/Debugging/`, `Docs/Refactoring/`, `Docs/Performance/`, and `Docs/Verification/` documents for supporting evidence.
 - Report missing or conflicting documents.
 - Do not treat unverified design documents as implemented code.
+- Evaluate requirements, user approval evidence, C++ evidence, Blueprint/assets, compile/runtime verification, and unresolved decisions separately.
+- Keep designs without an available explicit user approval source marked as approval history required (F). A document, source implementation, or Git commit is not approval of the gameplay rule.
+- Record design/code differences without silently changing either into the final design. Follow the current user's approved scope before editing or running validation.
