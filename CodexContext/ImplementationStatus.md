@@ -321,3 +321,212 @@ PIE/패키징: 인원, Host/Client, 네트워크 조건, 결과
 - 기존 기록을 삭제하거나 과거 테스트를 현재 테스트 결과로 바꾸지 않는다. 새로운 검증을 수행한 경우에만 결과와 기준 버전을 추가한다.
 - P0 승인 범위는 모듈 AGENTS, 이 폴더 README, 이 파일의 근거 정정뿐이다. P1~P3, C++/BP/에셋/Config 변경, Git add/commit/push/merge, 빌드·테스트는 실행하지 않는다.
 - P0 완료 후 즉시 중단하고 변경 diff와 남은 F/G 및 P1 결정 항목을 보고한다. 다음 작업은 별도 승인 후 진행한다.
+
+
+## 10. P2 승인 설계 및 현재 구현 — 2026-11-13
+
+**승인 출처:** 현재 대화의 사용자 요청 「Don't Melt — P2 최종 설계 문서 동기화」(본문에서 지칭한 P1-B 채택 범위). 이 승인은 이번 시점의 목표 설계에만 적용하며 과거 ChatGPT 승인 이력으로 소급하지 않는다. 원문에 명시하지 않은 세부 정책은 승인하지 않았다.
+
+**소스 기준:** HEAD `914173a2822f4adcfb3b16d3686a1ebb1c73fc29`. `914173a` 이후 커밋된 Source/Config 차이는 없고 작업 전 추적 파일 변경도 없었다. 이번 변경은 문서만이며 Content/Food는 기존 미추적 상태로 건드리지 않는다.
+
+**읽는 순서:** 이10절과 각 문서의 P2 승인 동기화 절이 E1~E10의 최신 기준이다. 0~8절은 ZIP 기록,9절은 c3f94a9/P0 당시 분석으로 보존한다. 과거 F는 당시의 승인 미확인 기록이며 이번에 명시 승인된 범위에만 최신 승인이 추가된다. 원문 접근 불가인 과거 승인 이력이나 이번 미결정 사항까지 해결됐다는 뜻은 아니다.
+
+**상태:** 설계 승인 / 구현 확인 / 부분 구현 / 에셋 미검증 / 실행 미검증 / 세부 정책 미확정을 독립적으로 사용한다. 모든 항목의 Blueprint·DataAsset·Animation 실제 적용은 미검증이고 빌드·PIE·Steam 테스트는 미실행이다. 설계 동기화를 기능 구현 완료로 표시하지 않는다.
+
+**공통 원칙:** UE5.5, C++ 중심, 2~4인 Listen Server, Steam, Server Authority, Single Source of Truth, 최소 Replication, Event Driven 우선, 클래스 책임 분리, 판정/UI 분리, Blueprint 참조 호환성을 유지한다. C++ 구현은 별도 승인 후 진행한다.
+
+### E1 — 결과 통계와 순위 분리
+
+**설계 승인:** 결과표 유물 열은 경기 중 누적 획득 횟수, 최종 순위는 종료 시 등록 유물 수를 사용하며 동률 공동 순위를 허용한다. 두 통계를 별도 관리하고 표시 변경으로 서버 승리 판정을 바꾸지 않는다.
+
+**구현 확인 / 부분 구현:** `ADMRelicManager::TryCommitRelicAcquisition` → `ADMMatchPlayerState::IncrementAcquiredRelicCount` → `ADMMatchGameMode::BuildFinalPlayerResults`로 누적 통계를 보관한다. `FDMMatchResultEntry`의 `AcquiredRelicCount`와 `RelicCount`가 분리되어 있다. 그러나 `UDMPlayerResultRowWidget::SetResultEntry`는 현재 `RelicCount`를 표시하므로 목표 표시와 불일치한다. 성공 Pickup/Steal Commit마다 증가하는 것이 현재 동작이다.
+
+**세부 정책 미확정:** 자신의 유물을 Drop 후 재획득할 때 누적 횟수에 포함할지 미결정이다. 과거 '+1' 기록을 이번 승인으로 간주하지 않는다.
+
+**구현 변경 예상 범위:** 결과 Row의 표시 원본과 WBP 열 제목을 검토한다. 기존 결과 필드를 사용하고 승패 판정·등록 수 원본·새 RPC/복제는 변경하지 않는 방향이다. 집계 정책 변경은 별도 승인 대상이다.
+
+**검증 시나리오:** 누적5/등록2와 누적3/등록3의 표시·순위 분리, 탈취, Drop/재획득, 공동 순위, Host/Client 결과 캐시와 ACK. 결과 WBP 내부는 에셋 미검증, 빌드·실행 미검증.
+
+### E2 — 전멸 승자 단독 1위
+
+**설계 승인:** 일반 종료는 최종 등록 수 순위다. 전멸 승리에서는 등록 수와 무관하게 승자를 단독1위로 고정하고, 나머지는 2위부터 등록 수 기준 공동 순위를 부여한다. 승리 배너와 결과표의 승자 의미가 모순되지 않아야 한다.
+
+**구현 확인 / 부분 구현:** `DMMatchResultRules::SortAndRankResults`는 등록 수 내림차순이며 같은 등록 수에서만 승자를 우선한다. `ADMMatchGameMode::BuildFinalPlayerResults`가 이 함수를 호출한다. 따라서 등록 수가 적은 전멸 승자가 결과표1위가 아닐 수 있다. 현재 함수는 종료 사유별 승자 고정 계약을 받지 않는다.
+
+**공동 순위 계약:** 현재 코드는 동률이면 직전 Rank를 사용하고 비동률이면 Index+1을 사용한다(예: 등록4/2/2/1 → 순위1/2/2/4). 이 기존 계산 체계는 유지 대상으로 기록한다. 전멸 승자를 제외한 집합에 적용할 때의 등수 건너뛰기 등 상세 예시는 별도 확정 없이 새 규칙으로 추가하지 않는다.
+
+**구현 변경 예상 범위:** 결과 규칙 헤더·소스, GameMode 결과 생성 호출, 결과 규칙 테스트. 기존 Rank 필드 전달을 우선하며 새 RPC는 필요성이 확인될 때만 검토한다. 결과 WBP 배너·행을 수동 확인한다.
+
+**검증 시나리오:** 일반 종료 동률, 전멸 승자 등록 수가 더 적음/같음/많음, 나머지 동률, 2인 전멸 제외와 기존 승리 옵션 회귀. 에셋 미검증·실행 미검증.
+
+### E3 — 참가자 도착 대기 120초
+
+**설계 승인:** 기본 도착 제한은120초다. 경기 맵 서버 GameMode가 승인 참가자의 준비와 시스템 초기화를 검증한다. PC 존재만으로 완료하지 않는다. 도착 제한과 튜토리얼 제한을 분리하고 무한 대기를 방지한다. 미도착·명시적 이탈·Spawn/Possess 실패는 가능한 범위에서 진단·사용자 안내를 구분한다.
+
+**구현 확인:** `ADMMatchGameMode::StartPlay`가 아직 명단이 확정되지 않은 Waiting에서 타이머를 설정한다. 클라이언트 로딩 시작 시점 기준이 아니다. `HandleStartingNewPlayer_Implementation`은 부모 Spawn/Possess 후 Pawn/Controller를 확인한다. `IsStartingRosterComplete`는 기대 인원, 유효 PlayerState, 유효·고유 BaseSlot, Alive, Pawn·Controller·PlayerState 연결을 확인한다. `TryFinalizeStartingRoster`는 스폰 지점 및 NPC/유물/퀘스트/이벤트 초기화 후 도착 타이머를 해제하고 튜토리얼 게이트로 이동한다.
+
+**현재 중단 처리:** 시간 초과·Spawn/Possess 실패는 `AbortMatchForInternalFailure`의 InternalError 경로다. 종료 전 승인 참가자 Logout은 조건에 따라 PlayerDisconnect다. `TryAbortMatch` → 결과 처리 → 자동 복귀/결과 ACK 대기 → 서버 로비 Travel 경로가 있다. 과거90초·PlayerDisconnect 일괄 서술은 이전 설계 기록이다.
+
+**세부 정책 미확정:** 새 중단 사유 Enum·RPC는 승인하지 않았다. 기존 사유·진단·메시지로 충분한지 먼저 검토한다. 90초보다30초 여유가 늘지만 실제 로딩 적정성은 측정 전 확인 불가다.
+
+**구현 변경 예상 범위 / 검증:** 기본120초는 C++과 일치한다. GameMode BP 오버라이드는 에셋 미검증이다. 미도착, 지연 도착, 타임아웃 경계, 이탈, Spawn/Possess 실패, 결과·로비 복귀를 향후 검증한다. 실행 미검증.
+
+### E4 — 선택 휠과 지속형 Emote, 별도 FakeDeath
+
+**설계 승인:** 휠은 Emote 선택 UI, 홀드는 선택한 지속형 Emote 실행·유지 방식이다. 입력 종료·취소·상태 전환에서 종료하고, Emote 퀘스트 시작·지속·종료 계약을 유지한다. FakeDeath는 별도 동작 기능으로 관리한다. 기존 문서의 휠 항목 목록만으로 FakeDeath를 일반 Emote와 같은 구현으로 확정하지 않는다.
+
+**구현 확인 / 부분 구현:** `ADMPlayerCharacter::BindPoseAndEmoteInput`, `InputEmoteStarted`, `InputEmoteCompleted`는 기본 `DefaultEmoteId=Scream` 홀드 요청을 연결한다. `UDMCharacterStateComponent::RequestBeginEmote_Implementation` / `RequestEndEmote_Implementation`과 서버 행동·퀘스트 이벤트 경로가 있다. C++ 입력 설정에서 선택 휠 연결은 확인하지 못했다. FakeDeath enum·제한·Anim 분기는 있으나 명시적인 C++ 진입 호출 및 완전한 해제 경로는 확인하지 못했다. BP 전체 미구현이라고 단정하지 않는다.
+
+**세부 정책 미확정:** FakeDeath 진입/해제 조건, 공격·상호작용 제한, 서버 검증, 상태 복제, 애니메이션, 사망·스턴·관전 전환 상세 계약. 휠·홀드의 구체 키/에셋 연결도 구현 전 확인한다.
+
+**구현 변경 예상 범위:** InputConfigDataAsset, PlayerCharacter, CharacterStateComponent, 휠 WBP/입력 에셋/AnimBP. 선택 UI는 로컬, 판정은 서버이며 새 RPC·복제 계약은 상세 명세 승인 후 결정한다.
+
+**검증 시나리오:** 선택→홀드→해제/취소, 메뉴·스턴·사망·관전 전환, 퀘스트 지속 시간·종료 통지, Host/Client 표현. BP/Animation 에셋 미검증·실행 미검증.
+
+### E5 — 공통 이동 속도와 NPC 목표 수
+
+**설계 승인:** Player와 NPC 모두 공통 CharacterBase 기준 Walk200cm/s·Sprint500cm/s를 사용한다. 시작 참가자당 NPC15명, 최대60명이다. 2/3/4인 목표는30/45/60명이다.
+
+**구현 확인:** `ADMJellyCharacterBase`의 WalkSpeed/SprintSpeed 기본값은200/500이며 `PostInitializeComponents`와 이동 컴포넌트 `GetMaxSpeed` 경로에서 사용한다. `UDMMatchRuleDataAsset::DefaultNPCMultiplier` 기본15, `ADMMatchGameMode::TryFinalizeStartingRoster`의 인원×배율 스냅샷, `UDMNPCPopulationDirector::InitializePopulation`의 최대60 검증을 확인했다.
+
+**에셋 미검증:** Character BP·NPC 자식 BP의 속도, 규칙 DataAsset 배율, Nav/스폰 지점의 실제 적용은 확인 불가다. C++ 기본값이 일치한다는 이유만으로 모든 실행값이 일치한다고 선언하지 않는다.
+
+**역사 구분:** Walk300, NPC×10·최대40은 이전 버전이다. 40NPC 비용 측정 기록을60NPC 성능 완료로 사용하지 않는다.
+
+**구현 변경 예상 범위 / 검증:** 현재 기본값의 불필요한 이중 수정은 하지 않는다. BP/DataAsset 검수 후 차이가 확인된 범위만 별도 승인한다. 2/3/4인 수량, Player/NPC 실속도, SavedMove 보정, 4인60NPC AI/Nav/Movement/Animation/복제 비용을 측정한다. 성능·실행 미검증.
+
+### E6 — NPC 이동 발소리 금지
+
+**설계 승인:** NPC는 이동 발소리를 내지 않고 PlayerCharacter만 이동 발소리를 낸다. 사용자가 직접 확인한 의도이며 정책 자체를 재설계하지 않는다. NPC 비명·웃음·이벤트 사운드는 별개다. 이동 발소리는 플레이어 식별 단서가 될 수 있고 발소리 증폭·투명화 표현과 연결된다.
+
+**구현 확인:** `UDMCharacterAudioComponent::CanPlayFootstepLocally`는 소유자가 `ADMPlayerCharacter`인 경우만 허용한다. `HandleFootstepNotify`는 이 검사를 거쳐 로컬 재생하며 발소리 전용 RPC를 추가하지 않는다. 조사한 C++ 발소리 경로에서 NPC 허용 우회는 확인하지 못했다.
+
+**에셋 미검증:** BP 직접 재생, Animation의 Sound Notify, 별도 AudioComponent 우회는 확인 불가다. NPC 웃음/비명을 발소리로 간주해 제거하지 않는다.
+
+**문서·구현 변경 예상 범위:** NPC 발소리를 전제한 과거 URO/Concurrency/군집 오디오 분석은 역사 자료다. NPC 최적화와 Player 발소리 Notify 보존을 구분한다. 현재 C++ 정책 변경 필요는 확인되지 않았다. 새 RPC·복제는 계획하지 않는다.
+
+**검증 시나리오:** Host/Client 각각 NPC 걷기·달리기 무음, Player 걷기·달리기·공중·투명화·증폭, NPC 웃음·비명 유지. 실제 출력·에셋·실행 미검증.
+
+### E7 — RandomEvent HUD 설명 단일화
+
+**설계 승인:** `TXT_EventDescription`만 표시한다. 이름과 진행바는 표시하지 않으며 필수 UI 바인딩에서도 해제하는 것이 목표다. 설명 갱신, 경고·진행·종료 전환, GameState 연결, 종료 정리는 유지한다. DataAsset DisplayName과 서버 이벤트 판정 데이터는 HUD 미사용을 이유로 제거하지 않는다.
+
+**구현 확인 / 부분 구현:** `UDMRandomEventHUDWidget::RefreshPresentation`은 현재 TXT_EventName/TXT_EventDescription/PB_EventProgress 세 요소를 모두 요구하고 이름·진행률도 갱신한다. `UDMGameRootWidget`은 GameState 및 표시 활성 상태를 연결한다. 조사한 C++에서 외부 시스템이 이름·진행바 자식 포인터를 직접 사용하는 경로는 확인하지 못했다. 기존 세 요소 명세는 이전 버전이다.
+
+**구현 변경 예상 범위:** DMRandomEventHUDWidget.h/.cpp의 필수 조건·필드·SetText/SetPercent와 WBP_DMRandomEventHUD 레이아웃을 함께 변경한다. WBP에서만 먼저 삭제하면 현재 C++의 전체 표시 조건과 충돌한다. 서버 Director/GameState 판정·RPC/Replication 변경은 목표에 필요하지 않다. 설명 전환·만료에 필요한 타이머를 무조건 제거하지 않는다.
+
+**검증 시나리오:** 설명만 바인딩한 WBP 컴파일, 경고→진행→종료, 정의 누락, Phase 종료·Travel·재생성, Host/Client. WBP 존재는 확인했으나 내부는 에셋 미검증·실행 미검증.
+
+### E8 — Steam 안전 복구 상태 머신 유지
+
+**설계 승인:** 기존 상태 머신을 유지하며 전면 재작성하지 않는다. Create/Find/Join/Destroy/Update별 비동기 결과를 구분하고 기본 요청30초를 유지한다. 타임아웃은 플랫폼 취소 완료가 아니다. 작업 중 중복 요청을 거절하고 원 요청 완료·필요한 잔여 세션 정리·안전한 재시도 조건 확인 후 다음 요청을 허용한다. 불확실하면 차단·재시작 안내한다. 영구 차단 후 무의미한 로비 재시도를 반복하지 않는다.
+
+**구현 확인:** `UDMOnlineSessionSubsystem::HandleOperationTimeout`은 지연 완료를 기다리고 Find 취소를 시도한다. Create/Join 지연·실패는 `BeginRecoveryDestroy`로 잔여 세션을 처리한다. Destroy 완료는 성공 플래그와 NamedSession 잔존을 확인한다. Find는 취소/완료 결과에 따라 종료하며 Update 지연 완료는 실패 처리한다. `CompleteOperation`은 Delegate·Timer·상태를 정리한 뒤 원 작업 결과를 알린다. `FailClosedRecovery`의 bRecoveryBlocked와 `RejectBlockedOperation`은 불확실한 상태에서 새 요청을 막는다.
+
+**시간·콜백 경계:** 요청30초, 기존 완료 대기20초, 필요시 정리 단계20초가 각각 설정될 수 있다. 전체50초 고정 상한으로 확정하지 않는다. RequestId/진단 순번은 플랫폼 취소나 이전 콜백 격리를 보증하지 않는다. 작업 종류·세션명 검사와 Delegate 해제의 정적 확인을 Steam 안전성 보증으로 확대하지 않는다.
+
+**부분 구현 / 보완 목표:** 연결 중·작업 실패·복구 진행 중·재시도 가능·재시작 필요를 UI에서 구분한다. `ADMLobbyGameMode::HandleLobbyStatusUpdated`/`HandleReturningPlayersTimeout`의 재개 실패5초 반복은 영구 차단 시 중지·안내 연결이 필요하다. Frontend 실패/정리 안내는 있으나 단계별 상태 전달 전체는 확인되지 않았다.
+
+**구현 변경 예상 범위:** Subsystem 상태 통지, FrontendPlayerController/MainMenu와 LobbyGameMode/로비 UI의 안내·반복 제어를 최소 보완하는 계획. 새로운 통지 API/RPC 상세는 별도 구현 승인으로 결정한다. 온라인 상태 머신과 GameMode 경기 판정을 섞지 않는다.
+
+**검증 시나리오:** 작업별 정상·명시 실패·무응답·지연/중복/동기 콜백, Find 취소 실패, 잔여 세션 Destroy 실패, 복구 후 재요청, 차단 후 반복 중지·재시작 안내. 실제 Steam·UI·실행 미검증.
+
+### E9-A — 전원 튜토리얼과 300초 제한
+
+**설계 승인:** 경기 시작 전 전원 완료, 기존300초 제한, 완료·실패·시간 초과·이탈 구분, 서버 최종 판정을 채택한다.
+
+**구현 확인:** `ADMMatchGameMode::StartPreMatchTutorialGate`는 확정 명단을 기준으로 완료 집합·300초 타이머·Client 튜토리얼 표시를 관리하고 완료 후 Countdown으로 진행한다. 표시 실패·시간 초과는 현재 내부 실패 중단 경로다. 도착120초 타이머와 별도다.
+
+**세부 정책 미확정:** 모든 튜토리얼 실패 유형에서 전체 경기를 중단할지의 상세 계약은 현재 구현 사실과 구분한다. 이번 기본 정책 승인으로 모든 실패 처리 세부를 일괄 승인하지 않는다.
+
+**구현 변경 예상 범위 / 검증:** GameMode 게이트·PlayerController Client 표시·완료 요청·튜토리얼 WBP를 검토한다. 현재 전원 완료/300초 기본은 일치한다. 중복 완료·미완료·표시 실패·시간 초과·이탈·Host UI를 확인해야 한다. WBP/시작 조건 실제 적용은 에셋 미검증·실행 미검증.
+
+### E9-B — 서버 리스폰 재시도 상한
+
+**설계 승인:** 최초 실패 후 최대3회 재시도, 서버 관리, 무한 재시도 방지, 성공 시 Pawn·Controller·PlayerState 연결 복구, 실패 원인·소진 기록을 유지한다.
+
+**구현 확인:** `UDMRespawnCoordinator::HandleRespawnTimerExpired` / `ScheduleRespawnRetry`가 재시도와 연결·보호 적용을 관리한다. 기본 재시도 간격은 GameMode의1초이며 최소0.05초 보정이 있다. 최대3회 소진 시 현재 코드는 전체 경기 내부 실패 중단을 요청한다.
+
+**세부 정책 미확정:** 한 명의 재시도 소진으로 전체 경기를 중단할지 최종 미승인이다. 현재 구현을 승인된 규칙으로 승격하지 않는다. 간격1초는 현재 구현 기준값으로 기록하며 새로운 수치 승인을 추가하지 않는다.
+
+**구현 변경 예상 범위 / 검증:** RespawnCoordinator·GameMode 실패 처리·관전 Handoff를 정책 결정 후 검토한다. 새 Pawn 성공 전 Alive/Client 복귀 금지 계약을 유지한다. 일시 실패 후 성공, 최초+재시도3회 소진, 종료·Logout 중 타이머 정리, 보호 적용 실패를 Host/Client로 검증한다. 스폰 에셋·실행 미검증.
+
+### E9-C — 플레이어 실제 사망에 대한 NPC 비웃음
+
+**설계 승인:** 실제 플레이어 사망 후 주변 NPC 반응과 비웃음 표현을 유지한다. Panic/Stun·행동 상태 충돌을 막고 다른 참가자에게 제공하는 사망 위치·상황 단서를 고려한다. 단순한 장식 효과로 취급하지 않는다.
+
+**구현 확인:** GameMode 사망 처리 → `UDMNPCPopulationDirector::HandleNearbyPlayerDeath` → `ADMJellyAIController::TryStartDeathMockingReaction`의 행동 전환·이동 중지·Laugh 요청 경로가 있다. 규칙 DataAsset C++ 기본값은 반경800cm, 최대3명, 지속2.5초다. 이는 현재 구현 기준값이며 실제 에셋 적용 수치와 재생 성공을 의미하지 않는다.
+
+**구현 변경 예상 범위 / 검증:** Director·AIController·RuleDataAsset·Laugh Animation/Audio 연결을 검수한다. 수치 변경은 별도 승인한다. 범위 경계·대상 수·반응 종료·Panic/Stun 경합·사망/Travel 정리와 Host/Client 청각 단서를 검증한다. NPC 이동 발소리 금지와 웃음 허용은 충돌하지 않는다. 에셋·실행 미검증.
+
+### E10 — 정보 공개 범주와 Listen Host 신뢰 경계
+
+**설계 승인:** Server Authority·최소 전송·OwnerOnly를 유지한다. 전체 Client 공개 / Owner Client 전용 / 스킬 시전자 전용 / 관전자 예외 / 서버 전용으로 구분한다. 판정 원본과 표현 데이터를 분리한다. UI 비표시를 비전송 보장으로 취급하지 않는다. Listen Host는 권위 서버를 실행하는 신뢰 서버다. Host에게 서버 원본까지 은폐한다고 보장하지 않는다.
+
+| 범주 | 목표 계약 | 현재 코드 관측 / 승인 경계 |
+|---|---|---|
+| 전체 Client 공개 | 공개 경기 상태·필요한 관찰 표현만 | GameState Phase·공개 이벤트/퀘스트·최종 결과, PlayerState rematch ready, Character Action/스턴·투명 표현. Relevant 범위와 필드별 재검수 필요 |
+| Owner 전용 | 개인 상태·개인 응답 최소화 | MatchPlayerState LifeState/BaseSlot/운반 여부, CharacterState 상세 태그·투명화 시간은 OwnerOnly |
+| 시전자 전용 | 기능에 필요한 최소 정보의 예외 명세 | ClientSetFootstepAmplifyPresentation은 대상 PlayerState를 전달. 현재 전달 사실이며 해당 참조 전체의 최종 예외 승인은 시스템 명세 확인 필요 |
+| 관전자 예외 | 관전 정책상 필요한 범위만 | ClientBeginSpectatorSequence의 Context·KillerPawn 등은 현재 구현. 숨길 정보와 예외 범위를 별도 확인 |
+| 서버 전용 | 원본 판정·불필요한 신원/운반 관계 | RelicManager 비복제, 스킬 서버 대상 선정. 클라이언트가 대상 Actor 대신 선택 정책을 제출 |
+
+**세부 정책 미확정:** 개별 RPC의 Actor/PlayerState 참조 허용 항목·수명·대상 범위는 기능별 명세 확인 전 새로 승인하지 않는다. '전역 전송 금지'를 '정당한 개별 기능에도 모든 참조 금지'로 해석하지 않는다. 반대로 현 코드 전달을 그대로 예외 승인하지 않는다. 일시 공개 종료 후 데이터를 비워도 Client의 과거 저장까지 방지하지 못한다.
+
+**구현 변경 예상 범위 / 검증:** MatchGameState/PlayerState, CharacterStateComponent, SkillComponent, MatchPlayerController의 GetLifetimeReplicatedProps/Client RPC와 관전·음성 참조를 필드별 재검수한다. 엔진 기본 필드·클래스 구분·BP 경로까지 전부 검증한 것은 아니다. 승인 후 필요한 범위만 변경하며 참조 무조건 제거로 스킬·관전을 깨뜨리지 않는다. 원격 Client/Host, 사망·관전·리스폰·늦은 Relevant, 실제 수신 데이터 확인은 미실행. 에셋·실행 미검증.
+
+### 후속 수정 제안 — 이번 수정 범위 밖
+
+아래는 역사 근거로 보존하며 이번에는 수정하지 않는다. 후속 승인 시 기존 기록을 지우지 않고 최신 기준 링크·적용 시점을 덧붙이는 방식으로 정정한다.
+
+- Docs/Debugging/Network/10_Match_Waiting_Timeout.md:90초·중단 사유의 과거 계약(E3).
+- Docs/Debugging/Network/04_Steam_Session_Timeout.md:30초 뒤 즉시 Delegate 해제로 재시도하는 과거 설명(E8).
+- Docs/Refactoring/03_MatchResult_Data.md:재획득+1 기록은 현재 구현이며 최종 정책 미결정(E1); 전멸 순위 현재 함수와 차이(E2).
+- Docs/Debugging/Gameplay/09_EliminationVictory_Ranking.md:수정 완료 기록과 현재 함수 불일치(E2).
+- Docs/Debugging/Gameplay/07_Respawn_Failure_Retry.md:무한 재시도 설명과 현재3회 상한 차이(E9-B).
+- Docs/Performance/01_NPC_Performance_Analysis.md 및03_Profiling_Plan.md:NPC 발소리·군집 오디오 전제와 Player 전용 정책 구분(E6),40명 과거 측정과60명 미검증 구분(E5).
+- Docs/Technical/02_Steam_Session_Lobby.md,03_Match_Flow_Result.md,05_Input_Movement.md,08_NPC_AI.md,11_UMG_UI.md,13_Spectator_Respawn.md:관련 목표/현재 구현/옛 설명 구분 후 별도 정정 검토.
+- Docs/Technical/04_Replication_RPC.md와10_Skill_Cooldown_Target.md:전역 공개 금지와 시전자·관전자 참조 예외의 경계(E10).
+- DevLog/step03_Movement_Pose.md,step06_NPC_AI.md,step10_UI_Result.md,step11_Steam_Voice_Jelly.md:당시 기록 유지, 최신 목표로 오독하지 않도록 후속 안내 검토. Docs/DevLog가 아닌 루트 DevLog가 실제 경로다.
+
+### 후속 구현 순서와 경계
+
+1. 재획득 집계, FakeDeath 상세, 튜토리얼 실패별 중단, 리스폰 소진 시 전체 중단, 정보 공개 예외 및 순위 세부 계약의 미결정 범위를 먼저 확인한다.
+2. 별도 승인 후 E1 결과 Row·E7 HUD의 작은 표현 변경을 우선한다. E2 순위 규칙과 호출·테스트는 승패 판정 변경 없이 분리한다. E8은 상태 머신 보존과 차단/안내 보완이다.
+3. 공통 속도·NPC 수·도착 제한의 BP/DataAsset 적용을 검수하고 필요 범위만 변경 승인한다. Config 변경 필요는 현재 확인되지 않았고 이번에 승인하지 않는다.
+4. 별도 승인 후 빌드→Editor 바인딩/에셋→Host/Client→실제 Steam 실패·지연 콜백→60NPC 성능 순으로 검증하고 근거를 기록한다.
+5. 이번에는 C++/에셋/Config/범위 밖 문서, Git add/commit/push/merge, 빌드·테스트를 하지 않는다. P3와 Git 커밋은 별도 승인 대상이다.
+
+### 현재 소스 근거 색인
+
+경로는 저장소 기준이며 링크는 문서 상대 경로다. 행 번호는 HEAD914173a의 정적 검색 위치이고 실행 증거가 아니다.
+
+| 항목 | 실제 소스 파일 | 함수·필드 및 검색 행 |
+|---|---|---|
+| E1 | [DMRelicManager.cpp](../Source/DontMelt/Private/Relic/DMRelicManager.cpp) | `TryCommitRelicAcquisition` — 1762행 |
+| E1 | [DMMatchPlayerState.cpp](../Source/DontMelt/Private/Framework/Match/DMMatchPlayerState.cpp) | `IncrementAcquiredRelicCount` — 93행 |
+| E1/E2 | [DMMatchGameMode.cpp](../Source/DontMelt/Private/Framework/Match/DMMatchGameMode.cpp) | `BuildFinalPlayerResults` — 3143행 |
+| E1 | [DMPlayerResultRowWidget.cpp](../Source/DontMelt/Private/UI/DMPlayerResultRowWidget.cpp) | `SetResultEntry` — 5행 |
+| E1 | [DMMatchTypes.h](../Source/DontMelt/Public/Core/DMMatchTypes.h) | `AcquiredRelicCount` — 185행 |
+| E2 | [DMMatchResultRules.cpp](../Source/DontMelt/Private/Framework/Match/DMMatchResultRules.cpp) | `SortAndRankResults` — 169행 |
+| E2 | [DMMatchResultRulesTests.cpp](../Source/DontMelt/Private/Tests/DMMatchResultRulesTests.cpp) | `SortAndRankResults` — 188행 |
+| E3 | [DMMatchGameMode.cpp](../Source/DontMelt/Private/Framework/Match/DMMatchGameMode.cpp) | `IsStartingRosterComplete` — 1000행 |
+| E3/E9-A | [DMMatchGameMode.h](../Source/DontMelt/Public/Framework/Match/DMMatchGameMode.h) | `StartingRosterTimeoutSeconds` — 411행 |
+| E4 | [DMPlayerCharacter.cpp](../Source/DontMelt/Private/Characters/DMPlayerCharacter.cpp) | `InputEmoteStarted` — 576행 |
+| E4 | [DMCharacterStateComponent.cpp](../Source/DontMelt/Private/Characters/Components/DMCharacterStateComponent.cpp) | `RequestBeginEmote_Implementation` — 216행 |
+| E5 | [DMJellyCharacterBase.h](../Source/DontMelt/Public/Characters/DMJellyCharacterBase.h) | `WalkSpeed =` — 168행 |
+| E5 | [DMJellyCharacterBase.cpp](../Source/DontMelt/Private/Characters/DMJellyCharacterBase.cpp) | `PostInitializeComponents` — 45행 |
+| E5/E9-C | [DMMatchRuleDataAsset.h](../Source/DontMelt/Public/Data/DMMatchRuleDataAsset.h) | `NPCDeathMockReactionRadius` — 111행 |
+| E5 | [DMNPCPopulationDirector.cpp](../Source/DontMelt/Private/AI/DMNPCPopulationDirector.cpp) | `InitializePopulation` — 27행 |
+| E6 | [DMCharacterAudioComponent.cpp](../Source/DontMelt/Private/Characters/Components/DMCharacterAudioComponent.cpp) | `CanPlayFootstepLocally` — 80행 |
+| E7 | [DMRandomEventHUDWidget.h](../Source/DontMelt/Public/UI/DMRandomEventHUDWidget.h) | `TXT_EventName` — 60행 |
+| E7 | [DMRandomEventHUDWidget.cpp](../Source/DontMelt/Private/UI/DMRandomEventHUDWidget.cpp) | `RefreshPresentation()` — 46행 |
+| E8 | [DMOnlineSessionSubsystem.cpp](../Source/DontMelt/Private/Online/DMOnlineSessionSubsystem.cpp) | `HandleOperationTimeout()` — 1164행 |
+| E8 | [DMLobbyGameMode.cpp](../Source/DontMelt/Private/Framework/Lobby/DMLobbyGameMode.cpp) | `HandleLobbyStatusUpdated(` — 645행 |
+| E9-A | [DMMatchGameMode.cpp](../Source/DontMelt/Private/Framework/Match/DMMatchGameMode.cpp) | `void ADMMatchGameMode::StartPreMatchTutorialGate` — 2173행 |
+| E9-B | [DMRespawnCoordinator.cpp](../Source/DontMelt/Private/Framework/Match/DMRespawnCoordinator.cpp) | `void UDMRespawnCoordinator::ScheduleRespawnRetry` — 574행 |
+| E9-C | [DMNPCPopulationDirector.cpp](../Source/DontMelt/Private/AI/DMNPCPopulationDirector.cpp) | `void UDMNPCPopulationDirector::HandleNearbyPlayerDeath` — 396행 |
+| E9-C | [DMJellyAIController.cpp](../Source/DontMelt/Private/Characters/DMJellyAIController.cpp) | `bool ADMJellyAIController::TryStartDeathMockingReaction` — 443행 |
+| E10 | [DMMatchPlayerState.cpp](../Source/DontMelt/Private/Framework/Match/DMMatchPlayerState.cpp) | `COND_OwnerOnly` — 22행 |
+| E10 | [DMCharacterStateComponent.cpp](../Source/DontMelt/Private/Characters/Components/DMCharacterStateComponent.cpp) | `COND_OwnerOnly` — 33행 |
+| E10 | [DMMatchPlayerController.h](../Source/DontMelt/Public/Framework/Match/DMMatchPlayerController.h) | `ClientSetFootstepAmplifyPresentation` — 433행 |
