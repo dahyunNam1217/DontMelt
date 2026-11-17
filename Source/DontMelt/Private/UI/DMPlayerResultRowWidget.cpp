@@ -4,7 +4,8 @@
 
 void UDMPlayerResultRowWidget::SetResultEntry(const FDMMatchResultEntry& Entry)
 {
-    if (!IsValid(TXT_PlayerName) || !IsValid(TXT_Rank) || !IsValid(TXT_RelicCount) || !IsValid(TXT_KillCount))
+    if (!IsValid(TXT_PlayerName) || !IsValid(TXT_Rank) || !IsValid(TXT_RelicCount) || !IsValid(TXT_AcquiredRelicCount)
+        || !IsValid(TXT_KillCount))
     {
         return;
     }
@@ -15,5 +16,6 @@ void UDMPlayerResultRowWidget::SetResultEntry(const FDMMatchResultEntry& Entry)
 
     // 경기 종료 시 상자에 등록된 유물 수를 표시한다.
     TXT_RelicCount->SetText(FText::AsNumber(Entry.RelicCount));
+    TXT_AcquiredRelicCount->SetText(FText::AsNumber(Entry.AcquiredRelicCount));
     TXT_KillCount->SetText(FText::AsNumber(Entry.KillCount));
 }

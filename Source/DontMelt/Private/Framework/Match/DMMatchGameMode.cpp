@@ -140,7 +140,9 @@ void ADMMatchGameMode::StartPlay()
         return;
     }
     if (HasAuthority() && StartingPlayerCountSnapshot == 0
-        && State->GetCurrentPhase() == EDMMatchPhase::Waiting)
+        && State->GetCurrentPhase() == EDMMatchPhase::Waiting
+        && State->GetMatchEndReason() == EDMMatchEndReason::None
+        && !GetWorldTimerManager().IsTimerActive(StartingRosterTimeoutHandle))
     {
         GetWorldTimerManager().SetTimer(StartingRosterTimeoutHandle, this,
             &ThisClass::HandleStartingRosterTimeout, StartingRosterTimeoutSeconds, false);
@@ -824,7 +826,8 @@ void ADMMatchGameMode::HandleStartingNewPlayer_Implementation(APlayerController*
 
     ADMPlayerCharacter* PlayerCharacter = NewPlayer->GetPawn<ADMPlayerCharacter>();
 
-    const bool bSpawnSucceeded = IsValid(PlayerCharacter) && PlayerCharacter->GetController() == NewPlayer;
+    const bool bSpawnSucceeded = IsValid(PlayerCharacter) && PlayerCharacter->GetController() == NewPlayer
+        && PlayerCharacter->GetPlayerState<ADMMatchPlayerState>() == MatchPlayerState;
 
     if (!bSpawnSucceeded)
     {
@@ -1032,7 +1035,7 @@ bool ADMMatchGameMode::IsStartingRosterComplete(FString& OutFailureReason) const
     {
         const ADMMatchPlayerState* MatchPlayerState = Cast<ADMMatchPlayerState>(PlayerState);
 
-        if (MatchPlayerState == nullptr)
+        if (!IsValid(MatchPlayerState))
         {
             OutFailureReason = TEXT("Invalid MatchPlayerState.");
 
@@ -1059,21 +1062,25 @@ bool ADMMatchGameMode::IsStartingRosterComplete(FString& OutFailureReason) const
 
         if (MatchPlayerState->GetLifeState() != EDMPlayerLifeState::Alive)
         {
-            OutFailureReason =
-                FString::Printf(TEXT("Player is not Alive. PlayerName=%s"), *MatchPlayerState->GetPlayerName());
+            OutFailureReason = FString::Printf(TEXT("Player is not Alive. BaseSlot=%d"), BaseSlot);
 
             return false;
         }
 
         const ADMPlayerCharacter* PlayerCharacter = MatchPlayerState->GetPawn<ADMPlayerCharacter>();
 
-        if (!IsValid(PlayerCharacter) || PlayerCharacter->GetController() == nullptr
+        if (!IsValid(PlayerCharacter))
+        {
+            OutFailureReason = FString::Printf(TEXT("Player Pawn is unavailable. BaseSlot=%d"), BaseSlot);
+            return false;
+        }
+
+        const APlayerController* Controller = Cast<APlayerController>(PlayerCharacter->GetController());
+        if (!IsValid(Controller) || Controller->GetPawn() != PlayerCharacter
+            || Controller->GetPlayerState<ADMMatchPlayerState>() != MatchPlayerState
             || PlayerCharacter->GetPlayerState<ADMMatchPlayerState>() != MatchPlayerState)
         {
-            OutFailureReason = FString::Printf(
-                TEXT("Pawn or Possess validation failed. PlayerName=%s"), *MatchPlayerState->GetPlayerName()
-            );
-
+            OutFailureReason = FString::Printf(TEXT("Possess or PlayerState linkage failed. BaseSlot=%d"), BaseSlot);
             return false;
         }
     }
@@ -1097,19 +1104,29 @@ void ADMMatchGameMode::HandleStartingRosterTimeout()
         AbortMatchForInternalFailure(TEXT("Starting roster timeout: MatchGameState is unavailable."));
         return;
     }
-    if (State->GetCurrentPhase() != EDMMatchPhase::Waiting)
+    if (State->GetCurrentPhase() != EDMMatchPhase::Waiting
+        || State->GetMatchEndReason() != EDMMatchEndReason::None)
     {
         return;
     }
 
+    // 단발 콜백을 소비한 뒤 기존 중단 경로만 사용한다. 미도착은 이탈 확정이 아니다.
+    GetWorldTimerManager().ClearTimer(StartingRosterTimeoutHandle);
     FString Reason;
-    IsStartingRosterComplete(Reason);
+    const bool bRosterReady = IsStartingRosterComplete(Reason);
+    const TCHAR* FailureCategory = State->PlayerArray.Num() < ExpectedPlayerCount
+        ? TEXT("ArrivalOrRosterIncomplete")
+        : (bRosterReady ? TEXT("RequiredInitializationIncomplete") : TEXT("ParticipantPreparationFailed"));
     AbortMatchForInternalFailure(FString::Printf(
-        TEXT("Starting roster timed out after %.1fs. Reason=%s"), StartingRosterTimeoutSeconds, *Reason));
+        TEXT("Starting roster timeout. Category=%s, Phase=Waiting, Limit=%.1fs, Expected=%d, Observed=%d, EndReason=InternalError, Detail=%s"),
+        FailureCategory, StartingRosterTimeoutSeconds, ExpectedPlayerCount, State->PlayerArray.Num(),
+        bRosterReady ? TEXT("Roster ready but required initialization is not complete.") : *Reason));
 }
 
 void ADMMatchGameMode::FailStartingRosterFinalization(const FString& Diagnostic)
 {
+    UE_LOG(LogDMMatchGameMode, Error,
+        TEXT("Starting roster required initialization failed. EndReason=InternalError, Detail=%s"), *Diagnostic);
     // 부분 초기화된 서버 시스템을 역순으로 정리한다.
     ShutdownRandomEventSystem();
     ShutdownQuestSystem();
@@ -3140,7 +3157,9 @@ bool ADMMatchGameMode::TryResolveOvertimeWinner(int32& OutWinningBaseSlot) const
     return ResolveResult == EDMOvertimeWinnerResolveResult::Resolved;
 }
 
-TArray<FDMMatchResultEntry> ADMMatchGameMode::BuildFinalPlayerResults(const int32 WinningBaseSlot) const
+TArray<FDMMatchResultEntry> ADMMatchGameMode::BuildFinalPlayerResults(
+    const EDMMatchEndReason EndReason, const int32 WinningBaseSlot
+) const
 {
     TArray<FDMMatchResultEntry> Results;
 
@@ -3175,8 +3194,10 @@ TArray<FDMMatchResultEntry> ADMMatchGameMode::BuildFinalPlayerResults(const int3
         Results.Add(MoveTemp(Entry));
     }
 
-    // 결과표 등수는 종료 순간 등록 유물 수 기준이다.
-    DMMatchResultRules::SortAndRankResults(Results, WinningBaseSlot);
+    // 전멸 승자만 단독 1위로 고정하고 나머지는 기존 등록 수 순위를 사용한다.
+    DMMatchResultRules::SortAndRankResults(
+        Results, WinningBaseSlot, EndReason == EDMMatchEndReason::EliminationVictory
+    );
 
     return Results;
 }
@@ -3360,7 +3381,7 @@ bool ADMMatchGameMode::TryFinishMatch(const EDMMatchEndReason EndReason, const i
 
     // 무승부와 전원 탈락에도 동일한 서버 기준 통계 스냅샷을 저장한다.
     // 승리자가 없으면 INDEX_NONE을 전달하고 기존 공동 순위 규칙을 사용한다.
-    FinalResult.PlayerResults = BuildFinalPlayerResults(WinningBaseSlot);
+    FinalResult.PlayerResults = BuildFinalPlayerResults(EndReason, WinningBaseSlot);
 
     if (FinalResult.PlayerResults.IsEmpty())
     {

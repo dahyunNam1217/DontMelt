@@ -75,5 +75,8 @@ namespace DMMatchResultRules
      *
      * 같은 등록 수에서는 승자를 먼저, 그다음 BaseSlot 오름차순으로 표시한다.
      */
-    void SortAndRankResults(TArray<FDMMatchResultEntry>& Results, int32 WinningBaseSlot);
+    // 전멸 종료에서는 유효한 승자를 단독 1위로 고정한다.
+    void SortAndRankResults(
+        TArray<FDMMatchResultEntry>& Results, int32 WinningBaseSlot, bool bPinWinnerFirst = false
+    );
 }

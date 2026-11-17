@@ -82,10 +82,13 @@ private:
     void UnbindLobbyStatusCompletion();
 
     // 경기 시작 잠금(bTravelCommitted)과 복구 상태를 해제한다.
-    // 복구가 실패해도 로비가 영구 잠기지 않도록 모든 실패 경로에서 호출한다.
+    // 광고 복원이 확인된 정상 완료에서만 호출한다.
     void ReleaseMatchStartLock(const TCHAR* Reason);
 
-    // 로비 상태 복구 실패 시 제한 횟수만큼 재시도하고, 한도를 넘기면 시작 잠금을 해제한다.
+    // 복구 차단·상한 소진 시 재시도를 정리하고 시작 잠금을 유지한다.
+    void StopLobbyStatusRecovery(const TCHAR* Reason);
+
+    // 로비 상태 복구 실패 시 제한적으로 재시도하며, 상한 소진을 성공으로 취급하지 않는다.
     void RetryOrReleaseLobbyStatusRestore(const TCHAR* Reason);
 
     // 복귀 인원이 제한 시간 안에 모두 도착하지 않았을 때 도착 인원 기준으로 로비를 재개한다.

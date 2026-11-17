@@ -30,5 +30,8 @@ protected:
     TObjectPtr<UTextBlock> TXT_RelicCount = nullptr;
 
     UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UTextBlock> TXT_AcquiredRelicCount = nullptr;
+
+    UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> TXT_KillCount = nullptr;
 };

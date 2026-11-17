@@ -406,9 +406,9 @@ private:
     FTimerHandle StartingRosterTimeoutHandle;
     FTimerHandle PreMatchTutorialTimeoutHandle;
 
-    // 참가자 입장과 초기 Spawn이 끝날 때까지 허용하는 최대 시간.
+    // 서버 StartPlay부터 참가자 준비·필수 초기화 완료까지의 제한. 튜토리얼 시간은 제외한다.
     UPROPERTY(EditDefaultsOnly, Category = "DM|Match|Startup", meta = (ClampMin = "5.0", UIMin = "5.0"))
-    float StartingRosterTimeoutSeconds = 120.0f;
+    float StartingRosterTimeoutSeconds = 90.0f;
 
     // 페이지 읽기·스킵을 포함해 모든 참가자가 완료할 때까지 허용하는 최대 시간.
     UPROPERTY(EditDefaultsOnly, Category = "DM|Match|Tutorial", meta = (ClampMin = "10.0", UIMin = "10.0"))
@@ -502,7 +502,7 @@ private:
      */
     bool TryResolveOvertimeWinner(int32& OutWinningBaseSlot) const;
 
-    TArray<FDMMatchResultEntry> BuildFinalPlayerResults(int32 WinningBaseSlot) const;
+    TArray<FDMMatchResultEntry> BuildFinalPlayerResults(EDMMatchEndReason EndReason, int32 WinningBaseSlot) const;
 
     /** 승패 판정 입력용으로 PlayerState 값을 복사한다. 유효하지 않으면 미배정 참가자로 만든다. */
     FDMMatchParticipantSnapshot

@@ -314,6 +314,12 @@ void ADMLobbyGameMode::HandleStartMatchRequest(ADMLobbyPlayerController* Request
         return;
     }
 
+    if (Session->IsRecoveryBlocked())
+    {
+        StopLobbyStatusRecovery(TEXT("Steam recovery blocked. Restart the game and Steam before retrying."));
+        return;
+    }
+
     if (Session->IsBusy())
     {
         UE_LOG(LogDMLobbyGameMode, Verbose, TEXT("Match start rejected: session operation in progress."));
@@ -326,6 +332,7 @@ void ADMLobbyGameMode::HandleStartMatchRequest(ADMLobbyPlayerController* Request
     PendingMatchPlayerCount = ConnectedPlayerCount;
     bRestoringLobbyStatus = false;
 
+    UnbindLobbyStatusCompletion();
     BoundLobbySession = Session;
 
     LobbyStatusUpdateHandle = Session->OnUpdateCompleted.AddUObject(this, &ADMLobbyGameMode::HandleLobbyStatusUpdated);
@@ -334,13 +341,13 @@ void ADMLobbyGameMode::HandleStartMatchRequest(ADMLobbyPlayerController* Request
 
     const bool bRequestStarted = Session->UpdateLobbyMatchStarting(true);
 
-    if (!bRequestStarted && bTravelCommitted && !bRestoringLobbyStatus)
+    if (!bRequestStarted && LobbyStatusUpdateHandle.IsValid() && bTravelCommitted && !bRestoringLobbyStatus)
     {
         // 즉시 실패하여 완료 이벤트가 실행되지 않은 경우를 처리한다.
         UnbindLobbyStatusCompletion();
 
-        bTravelCommitted = false;
-        PendingMatchPlayerCount = 0;
+        // 요청 시작 실패도 광고 복원이 확인되기 전에는 잠금을 풀지 않는다.
+        ScheduleLobbyStatusRestore();
 
         UE_LOG(LogDMLobbyGameMode, Error, TEXT("Match start failed: Steam update request not started."));
     }
@@ -607,6 +614,18 @@ void ADMLobbyGameMode::TryReopenReturningLobby()
     UDMOnlineSessionSubsystem* Session =
         GetGameInstance() ? GetGameInstance()->GetSubsystem<UDMOnlineSessionSubsystem>() : nullptr;
 
+    if (!IsValid(Session))
+    {
+        StopLobbyStatusRecovery(TEXT("Returning lobby session subsystem is unavailable."));
+        return;
+    }
+
+    if (IsValid(Session) && Session->IsRecoveryBlocked())
+    {
+        StopLobbyStatusRecovery(TEXT("Returning lobby recovery blocked. Restart the game and Steam before retrying."));
+        return;
+    }
+
     const ADMLobbyGameState* LobbyGameState = GetGameState<ADMLobbyGameState>();
 
     if (!IsValid(Session) || Session->IsBusy() || !Session->HasApprovedMatchRoster() || !IsValid(LobbyGameState)
@@ -625,6 +644,7 @@ void ADMLobbyGameMode::TryReopenReturningLobby()
     }
 
     bReopeningReturningLobby = true;
+    UnbindLobbyStatusCompletion();
     BoundLobbySession = Session;
 
     LobbyStatusUpdateHandle = Session->OnUpdateCompleted.AddUObject(this, &ADMLobbyGameMode::HandleLobbyStatusUpdated);
@@ -633,17 +653,40 @@ void ADMLobbyGameMode::TryReopenReturningLobby()
 
     const bool bStarted = Session->UpdateLobbyMatchStarting(false);
 
-    if (!bStarted && bReopeningReturningLobby)
+    if (!bStarted && LobbyStatusUpdateHandle.IsValid() && bReopeningReturningLobby)
     {
         UnbindLobbyStatusCompletion();
         bReopeningReturningLobby = false;
 
-        UE_LOG(LogDMLobbyGameMode, Error, TEXT("Failed to request Steam lobby reopen."));
+        RetryOrReleaseLobbyStatusRestore(TEXT("Failed to request Steam lobby reopen."));
     }
 }
 
 void ADMLobbyGameMode::HandleLobbyStatusUpdated(const bool bWasSuccessful, const FString& Detail)
 {
+    // 구독을 이미 소비했거나 종료한 복구의 중복 완료는 처리하지 않는다.
+    if (!LobbyStatusUpdateHandle.IsValid())
+    {
+        return;
+    }
+    if (!bReopeningReturningLobby && (!bTravelCommitted || (!bRestoringLobbyStatus && PendingMatchPlayerCount <= 0)))
+    {
+        UnbindLobbyStatusCompletion();
+        return;
+    }
+    UDMOnlineSessionSubsystem* CompletedSession = BoundLobbySession.Get();
+    if (!IsValid(CompletedSession) || CompletedSession->IsRecoveryBlocked())
+    {
+        StopLobbyStatusRecovery(TEXT("Steam completion cannot restore lobby safety. Check Steam and restart if recovery is blocked."));
+        return;
+    }
+    if (CompletedSession->IsBusy())
+    {
+        // 완료 알림 전에 다른 작업이 시작된 경우 해당 결과를 성공으로 소비하지 않는다.
+        StopLobbyStatusRecovery(TEXT("Steam operation changed before lobby completion could be confirmed."));
+        return;
+    }
+
     // 이전 매치에서 돌아온 로비의 광고 상태 복원 결과다.
     if (bReopeningReturningLobby)
     {
@@ -656,6 +699,7 @@ void ADMLobbyGameMode::HandleLobbyStatusUpdated(const bool bWasSuccessful, const
         {
             Session->ClearApprovedMatchRoster();
             ExpectedReturningPlayers = 0;
+            LobbyStatusRestoreAttemptCount = 0;
 
             // 재개가 완료되었으므로 복귀 대기 타임아웃을 해제한다.
             GetWorldTimerManager().ClearTimer(ReturningPlayersTimeoutTimer);
@@ -666,10 +710,7 @@ void ADMLobbyGameMode::HandleLobbyStatusUpdated(const bool bWasSuccessful, const
         {
             UE_LOG(LogDMLobbyGameMode, Error, TEXT("Steam lobby reopen failed: %s"), *Detail);
 
-            // 재개 실패 시 로비가 영구 잠기지 않도록 5초 후 다시 시도한다.
-            GetWorldTimerManager().SetTimer(
-                ReturningPlayersTimeoutTimer, this, &ADMLobbyGameMode::HandleReturningPlayersTimeout, 5.0f, false
-            );
+            RetryOrReleaseLobbyStatusRestore(TEXT("Steam lobby reopen failed."));
         }
 
         return;
@@ -696,8 +737,7 @@ void ADMLobbyGameMode::HandleLobbyStatusUpdated(const bool bWasSuccessful, const
         {
             UE_LOG(LogDMLobbyGameMode, Error, TEXT("Lobby status restore failed: %s"), *Detail);
 
-            // 복구 실패 시 제한 횟수만큼 다시 복구하고,
-            // 그래도 실패하면 로비가 영구 잠기지 않도록 시작 잠금을 해제한다.
+            // 확인된 실패만 제한적으로 재시도하며 소진 시에도 시작 잠금은 유지한다.
             RetryOrReleaseLobbyStatusRestore(TEXT("Lobby status restore failed."));
         }
 
@@ -827,45 +867,66 @@ void ADMLobbyGameMode::RestoreLobbyStatus()
     UDMOnlineSessionSubsystem* Session =
         IsValid(GameInstance) ? GameInstance->GetSubsystem<UDMOnlineSessionSubsystem>() : nullptr;
 
+    if (IsValid(Session) && Session->IsRecoveryBlocked())
+    {
+        StopLobbyStatusRecovery(TEXT("Steam recovery blocked. Restart the game and Steam before retrying."));
+        return;
+    }
+
     if (!IsValid(Session) || Session->IsBusy())
     {
         UE_LOG(LogDMLobbyGameMode, Error, TEXT("Lobby status restore cannot be started."));
 
-        // 다른 세션 작업이 끝날 때까지 재시도하고,
-        // 한도를 넘기면 로비가 영구 잠기지 않도록 시작 잠금을 해제한다.
+        // 다른 작업을 중복 시작하지 않고 기존 상한 내에서만 다시 확인한다.
         RetryOrReleaseLobbyStatusRestore(TEXT("Lobby status restore cannot be started."));
         return;
     }
 
+    UnbindLobbyStatusCompletion();
     BoundLobbySession = Session;
 
     LobbyStatusUpdateHandle = Session->OnUpdateCompleted.AddUObject(this, &ADMLobbyGameMode::HandleLobbyStatusUpdated);
 
     const bool bRequestStarted = Session->UpdateLobbyMatchStarting(false);
 
-    if (!bRequestStarted && bRestoringLobbyStatus)
+    if (!bRequestStarted && LobbyStatusUpdateHandle.IsValid() && bRestoringLobbyStatus)
     {
         UnbindLobbyStatusCompletion();
 
         UE_LOG(LogDMLobbyGameMode, Error, TEXT("Lobby status restore request failed."));
 
-        // 요청 시작 실패도 재시도 후 한도를 넘기면 시작 잠금을 해제한다.
+        // 동기 완료가 이미 처리되었다면 이 분기에 다시 진입하지 않는다.
         RetryOrReleaseLobbyStatusRestore(TEXT("Lobby status restore request failed."));
     }
 }
 
 void ADMLobbyGameMode::RetryOrReleaseLobbyStatusRestore(const TCHAR* Reason)
 {
+    UDMOnlineSessionSubsystem* Session =
+        GetGameInstance() ? GetGameInstance()->GetSubsystem<UDMOnlineSessionSubsystem>() : nullptr;
+    if (!IsValid(Session) || Session->IsRecoveryBlocked())
+    {
+        StopLobbyStatusRecovery(Reason);
+        return;
+    }
+
     ++LobbyStatusRestoreAttemptCount;
 
     if (LobbyStatusRestoreAttemptCount < MaxLobbyStatusRestoreAttempts)
     {
-        // 복구 상태(bRestoringLobbyStatus/bTravelCommitted)는 유지한 채 1초 후 다시 복구한다.
-        bRestoringLobbyStatus = true;
-
-        GetWorldTimerManager().SetTimer(
-            LobbyStatusRestoreRetryTimer, this, &ADMLobbyGameMode::RestoreLobbyStatus, 1.0f, false
-        );
+        if (ExpectedReturningPlayers > 0)
+        {
+            GetWorldTimerManager().SetTimer(
+                ReturningPlayersTimeoutTimer, this, &ADMLobbyGameMode::HandleReturningPlayersTimeout, 5.0f, false
+            );
+        }
+        else
+        {
+            bRestoringLobbyStatus = true;
+            GetWorldTimerManager().SetTimer(
+                LobbyStatusRestoreRetryTimer, this, &ADMLobbyGameMode::RestoreLobbyStatus, 1.0f, false
+            );
+        }
 
         UE_LOG(
             LogDMLobbyGameMode,
@@ -879,9 +940,21 @@ void ADMLobbyGameMode::RetryOrReleaseLobbyStatusRestore(const TCHAR* Reason)
         return;
     }
 
-    // Steam 광고 상태는 '시작 중'으로 남을 수 있으나,
-    // 호스트가 다시 시작하거나 로비를 나갈 수 있도록 로컬 잠금은 해제한다.
-    ReleaseMatchStartLock(Reason);
+    // 상한 소진은 광고 복원 성공이 아니다. 이탈 경로와 독립된 시작 잠금은 유지한다.
+    StopLobbyStatusRecovery(Reason);
+}
+
+void ADMLobbyGameMode::StopLobbyStatusRecovery(const TCHAR* Reason)
+{
+    UnbindLobbyStatusCompletion();
+    GetWorldTimerManager().ClearTimer(LobbyStatusRestoreRetryTimer);
+    GetWorldTimerManager().ClearTimer(ReturningPlayersTimeoutTimer);
+    bRestoringLobbyStatus = false;
+    bReopeningReturningLobby = false;
+    PendingMatchPlayerCount = 0;
+    bTravelCommitted = true;
+    UE_LOG(LogDMLobbyGameMode, Error,
+        TEXT("Lobby recovery stopped; match start remains locked. Leave the lobby; if Steam recovery is blocked, restart the game and Steam. Reason=%s"), Reason);
 }
 
 void ADMLobbyGameMode::ReleaseMatchStartLock(const TCHAR* Reason)
@@ -900,6 +973,19 @@ void ADMLobbyGameMode::HandleReturningPlayersTimeout()
 {
     if (!HasAuthority() || ExpectedReturningPlayers <= 0 || bTravelCommitted)
     {
+        return;
+    }
+
+    UDMOnlineSessionSubsystem* Session =
+        GetGameInstance() ? GetGameInstance()->GetSubsystem<UDMOnlineSessionSubsystem>() : nullptr;
+    if (!IsValid(Session))
+    {
+        StopLobbyStatusRecovery(TEXT("Returning lobby session subsystem is unavailable."));
+        return;
+    }
+    if (IsValid(Session) && Session->IsRecoveryBlocked())
+    {
+        StopLobbyStatusRecovery(TEXT("Returning lobby recovery blocked. Restart the game and Steam before retrying."));
         return;
     }
 
@@ -929,7 +1015,8 @@ void ADMLobbyGameMode::HandleReturningPlayersTimeout()
     TryReopenReturningLobby();
 
     // 재개 요청을 시작하지 못했다면(세션 Busy 등) 일정 시간 후 다시 시도한다.
-    if (ExpectedReturningPlayers > 0 && !bReopeningReturningLobby)
+    if (ExpectedReturningPlayers > 0 && !bReopeningReturningLobby && !bTravelCommitted
+        && !GetWorldTimerManager().IsTimerActive(ReturningPlayersTimeoutTimer))
     {
         GetWorldTimerManager().SetTimer(
             ReturningPlayersTimeoutTimer, this, &ADMLobbyGameMode::HandleReturningPlayersTimeout, 5.0f, false

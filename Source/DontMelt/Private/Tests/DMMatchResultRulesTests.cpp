@@ -212,4 +212,69 @@ bool FDMResultRankingRuleTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FDMEliminationResultRankingTest,
+    "DontMelt.Match.ResultRules.EliminationRanking",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter
+)
+
+bool FDMEliminationResultRankingTest::RunTest(const FString& Parameters)
+{
+    // 승자 등록 수가 적거나 같거나 많아도 단독 1위이며, 나머지는 공동 순위다.
+    for (const int32 WinnerCount : {0, 2, 5})
+    {
+        TArray<FDMMatchResultEntry> Results = {
+            MakeResult(0, 2), MakeResult(1, WinnerCount), MakeResult(2, 2), MakeResult(3, 1)
+        };
+        for (FDMMatchResultEntry& Entry : Results)
+        {
+            Entry.AcquiredRelicCount = 10 - Entry.BaseSlot;
+            Entry.KillCount = Entry.BaseSlot;
+            Entry.PlayerName = FString::FromInt(Entry.BaseSlot);
+        }
+
+        DMMatchResultRules::SortAndRankResults(Results, 1, true);
+        TestEqual(TEXT("Pinned winner"), Results[0].BaseSlot, 1);
+        TestEqual(TEXT("Winner alone ranks first"), Results[0].Rank, 1);
+        TestEqual(TEXT("First remaining slot"), Results[1].BaseSlot, 0);
+        TestEqual(TEXT("Second remaining slot"), Results[2].BaseSlot, 2);
+        TestEqual(TEXT("Remaining rank two"), Results[1].Rank, 2);
+        TestEqual(TEXT("Remaining tied rank two"), Results[2].Rank, 2);
+        TestEqual(TEXT("Remaining rank four"), Results[3].Rank, 4);
+        for (const FDMMatchResultEntry& Entry : Results)
+        {
+            TestEqual(TEXT("Acquisition stays with player"), Entry.AcquiredRelicCount, 10 - Entry.BaseSlot);
+            TestEqual(TEXT("Kills stay with player"), Entry.KillCount, Entry.BaseSlot);
+            TestEqual(TEXT("Name stays with player"), Entry.PlayerName, FString::FromInt(Entry.BaseSlot));
+            TestEqual(TEXT("Registered count preserved"), Entry.RelicCount, Entry.BaseSlot == 1 ? WinnerCount : (Entry.BaseSlot == 3 ? 1 : 2));
+        }
+
+        // 재정렬해도 결과는 같아야 한다.
+        DMMatchResultRules::SortAndRankResults(Results, 1, true);
+        TestEqual(TEXT("Repeated ranking keeps winner"), Results[0].BaseSlot, 1);
+        TestEqual(TEXT("Repeated ranking keeps tie"), Results[2].Rank, 2);
+    }
+
+    TArray<FDMMatchResultEntry> ZeroResults = {
+        MakeResult(3, 0), MakeResult(2, 0), MakeResult(1, 0), MakeResult(0, 0)
+    };
+    DMMatchResultRules::SortAndRankResults(ZeroResults, 2, true);
+    TestEqual(TEXT("Zero-count winner first"), ZeroResults[0].BaseSlot, 2);
+    TestEqual(TEXT("Zero-count winner rank"), ZeroResults[0].Rank, 1);
+    for (int32 Index = 1; Index < ZeroResults.Num(); ++Index)
+    {
+        TestEqual(TEXT("Zero-count others tied second"), ZeroResults[Index].Rank, 2);
+    }
+
+    // 일반 종료에서는 낮은 등록 수의 승자를 강제로 올리지 않는다.
+    TArray<FDMMatchResultEntry> NormalResults = {MakeResult(0, 4), MakeResult(1, 1), MakeResult(2, 2)};
+    NormalResults[1].AcquiredRelicCount = 99;
+    NormalResults[1].KillCount = 99;
+    DMMatchResultRules::SortAndRankResults(NormalResults, 1, false);
+    TestEqual(TEXT("Normal leader preserved"), NormalResults[0].BaseSlot, 0);
+    TestEqual(TEXT("Acquisition and kills do not change rank"), NormalResults[2].BaseSlot, 1);
+    TestEqual(TEXT("Normal winner ranks by registration"), NormalResults[2].Rank, 3);
+    return true;
+}
+
 #endif

@@ -14,10 +14,10 @@ class ADMMatchGameState;
 class UDMRandomEventSetDataAsset;
 
 /**
- * 랜덤 이벤트의 이름·설명·진행률을 표시한다.
+ * 랜덤 이벤트의 설명만 표시한다.
  *
  * 공개 이벤트 상태는 GameState에서 읽는다.
- * 이벤트의 이름과 설명은 정적 Data Asset에서 조회한다.
+ * 이벤트 설명은 정적 Data Asset에서 조회한다.
  *
  * 서버 이벤트 판정이나 실제 상태이상 적용은 담당하지 않는다.
  */
@@ -47,7 +47,7 @@ protected:
 
 #pragma region Configuration
 
-    /** 이벤트 이름과 설명을 조회할 정적 Data Asset */
+    /** 이벤트 설명을 조회할 정적 Data Asset */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|UI|Random Event")
     TObjectPtr<UDMRandomEventSetDataAsset> RandomEventSetData = nullptr;
 
@@ -55,16 +55,16 @@ protected:
 
 #pragma region Widget References
 
-    /** 현재 랜덤 이벤트 이름 */
-    UPROPERTY(meta = (BindWidget))
+    /** 기존 WBP 호환용. 존재하면 숨기며 표시에는 사용하지 않는다. */
+    UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UTextBlock> TXT_EventName = nullptr;
 
     /** 현재 이벤트의 효과 및 예고 안내 */
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> TXT_EventDescription = nullptr;
 
-    /** 이벤트 예고 또는 진행 구간의 진행률 */
-    UPROPERTY(meta = (BindWidget))
+    /** 기존 WBP 호환용. 존재하면 숨기며 진행률은 갱신하지 않는다. */
+    UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UProgressBar> PB_EventProgress = nullptr;
 
 #pragma endregion

@@ -166,12 +166,19 @@ namespace DMMatchResultRules
         return EDMOvertimeWinnerResolveResult::Resolved;
     }
 
-    void SortAndRankResults(TArray<FDMMatchResultEntry>& Results, const int32 WinningBaseSlot)
+    void SortAndRankResults(
+        TArray<FDMMatchResultEntry>& Results, const int32 WinningBaseSlot, const bool bPinWinnerFirst
+    )
     {
-        // 승리 판정에는 영향을 주지 않으며, 승자는 등록 수가 같을 때의 표시 순서에만 사용한다.
+        // 승리 판정은 변경하지 않고 전멸 승자의 결과표 위치만 고정한다.
         Results.Sort(
-            [WinningBaseSlot](const FDMMatchResultEntry& A, const FDMMatchResultEntry& B)
+            [WinningBaseSlot, bPinWinnerFirst](const FDMMatchResultEntry& A, const FDMMatchResultEntry& B)
             {
+                if (bPinWinnerFirst && (A.BaseSlot == WinningBaseSlot) != (B.BaseSlot == WinningBaseSlot))
+                {
+                    return A.BaseSlot == WinningBaseSlot;
+                }
+
                 if (A.RelicCount != B.RelicCount)
                 {
                     return A.RelicCount > B.RelicCount;
@@ -194,7 +201,11 @@ namespace DMMatchResultRules
         {
             FDMMatchResultEntry& Entry = Results[Index];
 
-            const bool bIsTied = Index > 0 && Entry.RelicCount == Results[Index - 1].RelicCount;
+            // 고정된 승자와 두 번째 참가자는 등록 수가 같아도 공동 1위가 아니다.
+            const bool bFollowsPinnedWinner = bPinWinnerFirst && Index == 1
+                && Results[0].BaseSlot == WinningBaseSlot;
+            const bool bIsTied = Index > 0 && !bFollowsPinnedWinner
+                && Entry.RelicCount == Results[Index - 1].RelicCount;
 
             Entry.Rank = bIsTied ? Results[Index - 1].Rank : Index + 1;
         }

@@ -10,7 +10,7 @@
 
 namespace
 {
-    // 이벤트 공개 중에만 진행 바를 갱신한다.
+    // 공개 이벤트의 예고·진행·종료 경계를 서버 시각으로 확인한다.
     constexpr float RandomEventHUDRefreshInterval = 0.1f;
 }
 
@@ -19,6 +19,16 @@ namespace
 void UDMRandomEventHUDWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+
+    // 기존 WBP의 이름·진행바는 최종 설명 단일화 전까지 숨긴다.
+    if (IsValid(TXT_EventName))
+    {
+        TXT_EventName->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    if (IsValid(PB_EventProgress))
+    {
+        PB_EventProgress->SetVisibility(ESlateVisibility::Collapsed);
+    }
 
     // 공개 이벤트가 없을 때는 HUD를 숨긴다.
     SetVisibility(ESlateVisibility::Collapsed);
@@ -124,8 +134,18 @@ void UDMRandomEventHUDWidget::HandleRandomEventPublicStateChanged(
 
 void UDMRandomEventHUDWidget::RefreshPresentation()
 {
-    // 이름·설명·진행 바만 필수 Widget으로 사용한다.
-    if (!bPresentationActive || !IsValid(TXT_EventName) || !IsValid(TXT_EventDescription) || !IsValid(PB_EventProgress))
+    // 기존 위젯이 남아 있어도 설명 이외의 요소는 표시하지 않는다.
+    if (IsValid(TXT_EventName))
+    {
+        TXT_EventName->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    if (IsValid(PB_EventProgress))
+    {
+        PB_EventProgress->SetVisibility(ESlateVisibility::Collapsed);
+    }
+
+    // 설명만 필수 Widget으로 사용한다.
+    if (!bPresentationActive || !IsValid(TXT_EventDescription))
     {
         StopRefreshTimer();
         SetVisibility(ESlateVisibility::Collapsed);
@@ -170,20 +190,12 @@ void UDMRandomEventHUDWidget::RefreshPresentation()
 
     if (Definition != nullptr)
     {
-        // 이벤트 이름은 Data Asset의 DisplayName을 사용한다.
-        TXT_EventName->SetText(
-            Definition->DisplayName.IsEmpty() ? NSLOCTEXT("DMRandomEventHUD", "DefaultEventName", "랜덤 이벤트")
-                                              : Definition->DisplayName
-        );
-
         DescriptionText = Definition->Description.IsEmpty()
             ? NSLOCTEXT("DMRandomEventHUD", "EmptyDescription", "이벤트가 진행됩니다.")
             : Definition->Description;
     }
     else
     {
-        TXT_EventName->SetText(NSLOCTEXT("DMRandomEventHUD", "MissingEventDefinition", "랜덤 이벤트"));
-
         DescriptionText = NSLOCTEXT("DMRandomEventHUD", "MissingEventDescription", "이벤트 정보 확인 중");
     }
 
@@ -196,19 +208,6 @@ void UDMRandomEventHUDWidget::RefreshPresentation()
 
     TXT_EventDescription->SetText(DescriptionText);
 
-    // 기존 GameState의 시간 Query를 재사용한다.
-    const double RemainingSeconds =
-        bWarning ? GameState->GetRemainingRandomEventWarningTime() : GameState->GetRemainingRandomEventTime();
-
-    // 진행 바의 기준 구간을 계산한다.
-    const double WindowDuration = bWarning ? EventState.StartServerTime - EventState.WarningStartServerTime
-                                           : EventState.EndServerTime - EventState.StartServerTime;
-
-    // 예고와 진행 구간의 경과 비율을 계산한다.
-    const double Progress = WindowDuration > KINDA_SMALL_NUMBER ? 1.0 - RemainingSeconds / WindowDuration : 1.0;
-
-    PB_EventProgress->SetPercent(static_cast<float>(FMath::Clamp(Progress, 0.0, 1.0)));
-
     SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 
     UWorld* World = GetWorld();
@@ -220,7 +219,7 @@ void UDMRandomEventHUDWidget::RefreshPresentation()
 
     FTimerManager& TimerManager = World->GetTimerManager();
 
-    // 이벤트 진행 중에만 로컬 진행 바를 주기적으로 갱신한다.
+    // 예고 접두사 제거와 종료 시 숨김을 위해 기존 갱신 주기를 유지한다.
     if (!TimerManager.IsTimerActive(RefreshTimerHandle))
     {
         TimerManager.SetTimer(

@@ -53,7 +53,7 @@ public:
      * StartingPlayerCount * DefaultNPCMultiplier
      *
      * 현재 지원 최대 규모는
-     * 4 Players * 10 = 40 NPC다.
+     * 4명 × 15 = 60명이다.
      */
     UPROPERTY(
         EditAnywhere,
