@@ -1,3 +1,68 @@
+# P3-9 — 최신 아키텍처 결정 및 구현 대조 (2026-11-17)
+
+기준: Windows 개발 Worktree `C:\Unreal_My\Portfolio\DontMelt-P3-Work`, 브랜치 `work`, HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. **코드 정적 확인과 문서 동기화만 수행**했다. 빌드·Automation Test·PIE·Steam·에셋 에디터 검증은 미실행이다. 아래 최신 절이 P2 및 ZIP 분석 기록의 상충 내용과 구현 전 계획을 대체하며, 기존 기록은 당시 근거로 보존한다.
+
+## 최신 결정
+
+- 기존 ADMJellyCharacterBase → ADMPlayerCharacter / ADMNPCCharacter 구조와 GameMode·GameState·PlayerState·PlayerController, Manager·Component 책임을 유지한다.
+- P3-7 Anonymous Presentation PoC/B안은 본 프로젝트에 통합하지 않는다. 별도 실험 브랜치·Worktree를 보존한다.
+- 정상 게임 화면의 위장 일관성을 유지한다. 네트워크 메타데이터 수준에서 플레이어 정체를 숨기는 것은 필수 요구사항에서 제외한다. Listen Host의 서버 원본 은폐를 보장하지 않는다.
+- Server Authority / Single Source of Truth / Least Replication / Event Driven 및 비공개 게임 데이터 보호를 유지한다. 기존 공격·방어·스킬·유물·리스폰 규칙을 이 문서 작업으로 바꾸지 않는다.
+
+## P3-1 — 결과 통계·전멸 순위
+
+- `Private/UI/DMPlayerResultRowWidget.cpp::SetResultEntry`는 `RelicCount`와 `AcquiredRelicCount`를 각각 표시한다. `Public/UI/DMPlayerResultRowWidget.h`의 `TXT_AcquiredRelicCount`는 **BindWidget 필수**이며 기존 필수 항목과 하나라도 없으면 Row 갱신이 반환된다. WBP 변수·형식·부모 연결은 미검증이다.
+- `Private/Framework/Match/DMMatchGameMode.cpp::BuildFinalPlayerResults(EndReason, WinningBaseSlot)`는 전멸 종료에만 `SortAndRankResults(..., true)`를 전달한다. 승자는 단독1위, 나머지는 등록 수 내림차순 공동 순위(예:1·2·2·4), 일반 종료는 등록 수 순위다.
+- `Private/Tests/DMMatchResultRulesTests.cpp`의 `DontMelt.Match.ResultRules.EliminationRanking` 추가를 확인했다. 승자 등록 수 0/2/5, 전원0, 통계 보존, 반복 정렬, 일반 종료 비고정을 검사한다. 테스트 실행은 미실행이다.
+
+소스 경로는 이 절의 기능 설명에서 `Source/DontMelt/`를 기준으로 한다. 누적 획득 원본은 `Private/Relic/DMRelicManager.cpp::TryCommitRelicAcquisition` → `Private/Framework/Match/DMMatchPlayerState.cpp::IncrementAcquiredRelicCount`이고, 최종 등록 수는 RelicManager 조회다. 성공 Pickup/Steal Commit마다 증가하는 현재 동작을 기록하며 재획득 정책을 새로 확정하지 않는다.
+
+## P3-2 — RandomEvent HUD
+
+- `Public/UI/DMRandomEventHUDWidget.h`는 `TXT_EventDescription`만 BindWidget 필수다. `TXT_EventName`·`PB_EventProgress`는 BindWidgetOptional 호환 필드이며 존재하면 Collapsed 처리한다.
+- `Private/UI/DMRandomEventHUDWidget.cpp::RefreshPresentation`은 설명·예고 접두사만 표시하며 이름/진행률 갱신을 제거했다. GameState 공개 이벤트와 DataAsset 설명을 사용하고 정의 누락 시 대체 문구를 표시한다.
+- 기존0.1초 로컬 Timer는 예고→진행 전환과 종료 숨김을 위해 유지한다. 비활성·만료·Destruct 시 정리 경로가 있다. 서버 이벤트 판정과 복제 계약을 변경한 작업이 아니다.
+- 설명만 있는 WBP 컴파일, 경고→진행→종료, 정의 누락, Host/Client·Travel 재생성은 미검증이다.
+
+## P3-3 — 도착·준비·필수 초기화
+
+- `Public/Framework/Match/DMMatchGameMode.h::StartingRosterTimeoutSeconds` 기본값은 **90.0f**다. 서버 `StartPlay`에서 Waiting·종료 사유 None·미확정 명단·비활성 Timer 조건으로 설정한다. 클라이언트별 로딩 시작 시각 기준이 아니다.
+- `IsStartingRosterComplete`는 기대 인원, 유효 PlayerState·고유 BaseSlot·Alive·Pawn/Controller/PlayerState 양방향 연결을 검사한다. `HandleStartingNewPlayer_Implementation`도 Spawn/Possess 및 PlayerState 연결을 확인한다.
+- `HandleStartingRosterTimeout`은 단발 Timer를 정리하고 ArrivalOrRosterIncomplete / ParticipantPreparationFailed / RequiredInitializationIncomplete를 로그로 구분한 뒤 기존 **InternalError** 중단 경로를 호출한다. 미도착을 이탈로 확정하지 않는다.
+- `TryFinalizeStartingRoster`는 리스폰 지점, NPC·유물·퀘스트·이벤트 초기화를 확인한 후 Timer 해제와 튜토리얼 게이트로 진행한다. 실패는 `FailStartingRosterFinalization`의 역순 정리 및 중단 경로다. 튜토리얼 기본300초는 별도다. BP 제한값·사용자 안내·실제 실패 재현은 미검증이다.
+
+## P3-4 — Steam Lobby 복구 차단
+
+- `Private/Framework/Lobby/DMLobbyGameMode.cpp`의 `HandleStartMatchRequest`, `TryReopenReturningLobby`, `RestoreLobbyStatus`, `HandleReturningPlayersTimeout`에서 세션 복구 차단을 확인한다.
+- `HandleLobbyStatusUpdated`는 유효 구독·진행 문맥·세션 유효성·복구 차단·Busy를 검사한다. 등록 전 기존 Delegate를 해제하고 요청 직후 Handle 유효성도 확인하여 동기 완료의 중복 처리를 방지하는 코드다.
+- `StopLobbyStatusRecovery`는 소유 완료 Delegate와 복구/복귀 Timer를 정리하고 `bTravelCommitted=true`로 시작 잠금을 유지한다. `RetryOrReleaseLobbyStatusRestore`라는 기존 이름과 달리 상한 소진 시 잠금을 해제하지 않는다. 상한 상수는5이며 실패 카운트가5에 도달하면 중지한다. 반환 로비 재시도5초/일반 복구1초는 현재 구현값이다.
+- `ReleaseMatchStartLock` 호출은 광고 복원 성공 경로에 있다. 종료 시 `EndPlay` 정리도 유지한다. Busy/응답 대기5초 확인 분기까지 모든 반복이 동일 실패 카운트로 제한된다고 단정하지 않는다.
+- 기존 OnlineSessionSubsystem 상태 머신을 유지한다. 로그의 나가기·게임/Steam 재시작 안내는 확인했으나 UI 전달과 실제 Steam 정상/실패/지연/중복 콜백은 미검증이다.
+
+## P3-5 — NPC·이동·오디오 정책
+
+- `Public/Characters/DMJellyCharacterBase.h` 기본값 WalkSpeed=200/SprintSpeed=500, `Private/Characters/DMJellyCharacterBase.cpp::PostInitializeComponents`의 MaxWalkSpeed 적용, `Private/Characters/Components/DMCharacterMovementComponent.cpp::GetMaxSpeed`의 Sprint 경로를 확인했다. Player/NPC는 이 공통 기반을 상속한다.
+- `Public/Data/DMMatchRuleDataAsset.h::DefaultNPCMultiplier=15`, GameMode 시작 인원×배율 스냅샷, `Private/AI/DMNPCPopulationDirector.cpp::InitializePopulation`의 1~60 검증을 확인했다. 2/3/4인 목표는30/45/60명이다.
+- `Private/Characters/Components/DMCharacterAudioComponent.cpp::CanPlayFootstepLocally`는 ADMPlayerCharacter만 허용한다. NPC 발소리 제거 정책은 기존 구현이며 이번 커밋이 새로 제거한 것으로 기록하지 않는다. BP 직접 재생·Sound Notify 우회는 미검증이다.
+- P3 커밋에서 P3-5에 해당하는 직접 변경은 규칙 DataAsset 헤더 주석의 4×10=40 → 4×15=60 정정이다. 이동·배율·발소리 동작은 이전부터 존재하던 코드를 재확인한 것이다. 에셋 기본값·실제 속도·수량·음향·60NPC 성능은 미검증이다.
+
+## 남은 불일치와 P3-10 전 확인 항목
+
+- 아래 P2의120초·결과 Row 미반영·전멸 순위 미반영·HUD 세 요소 필수·로비 복구 실패 후 잠금 해제/무제한 재시도 전제는 최신 구현 설명으로 사용하지 않는다.
+- C++ 기본값과 BP/DataAsset 실제 값의 일치 여부는 확인 불가다. 특히 도착90초, Walk200/Sprint500, 배율15, NPC 목표30/45/60을 에디터에서 확인해야 한다.
+- 결과 WBP에 필수 `TXT_AcquiredRelicCount`가 있는지, 등록 수·획득 수 열의 이름과 레이아웃이 올바른지 P3-10에서 확인한다. 누락 시 Row 전체 표시가 갱신되지 않을 수 있다. RandomEvent 설명 바인딩도 확인한다.
+- P3-10에서 UE5.5 Development Editor 빌드 및 `DontMelt.Match.ResultRules.*` 실행을 별도 승인 범위에서 수행한다. 이후2~4인 Host/Client 결과·도착/준비 실패·Travel 정리·오디오·60NPC 측정과 실제 Steam 콜백/차단 UI를 검증한다. 이번에는 실행하지 않았다.
+- 로비 차단 시 로그는 존재하나 사용자에게 구체 사유·이탈/재시작 안내가 실제 전달되는지는 미확인이다. Busy/응답 대기 반복의 종료 보장도 Steam에서 별도 확인한다.
+- FakeDeath/선택 휠, 튜토리얼 실패별 정책, 리스폰 재시도 소진 시 전체 경기 중단 등 P2의 범위 밖 미결정 항목은 이번에 새로 확정하지 않는다.
+
+## Content/Food 읽기 전용 조사
+
+원본 main의 미추적83개 파일은 신규 Worktree에 자동 포함되지 않았고 신규 `Content/Food/`는 존재하지 않는다. `git ls-files`의1962개 경로를 기준으로 추적 .uasset/.umap/.cpp/.h/.ini/.cs/.uproject/.json을 읽어 `/Game/Food`, `Content/Food`, `Food/`의 ASCII 및 UTF-16LE 문자열을 검사했으며 일치0건이었다. 이는 패키지 문자열 검사로, Unreal Asset Registry/Reference Viewer의 참조 그래프 검증이나 런타임 로딩 검증이 아니다.
+
+현재 증거로 필수 복사 필요는 확인되지 않았다. 동적 경로 조립, 비추적·외부 자산, 실제 에디터 참조는 확인 불가다. P3-10 에디터 참조 검사에서 의존성이 확인되면 별도 조치 대상으로 보고한 뒤 처리한다. 이번에는 원본/실험 Worktree 변경과 파일 복사·이동·삭제를 하지 않았다.
+
+---
+
 > **기록 구분 — P0 문서 정정**
 > 아래 원래 제목과 0~8절은 2026-11-12의 **과거 ZIP 분석 기록을 그대로 보존한 것**이다. 그 안의 '현재', '지금 판정', '소스 없음', '확정'은 당시 자료와 서술을 가리키며 현재 Git 저장소의 구현 상태나 승인 인증으로 사용하지 않는다.
 > 현재 Git 커밋 `c3f94a9` 기준 분석은 별도 **9절**부터 읽는다. 이번 정정은 문서 근거 체계만 다루며 기존 설계 원칙과 게임 규칙을 변경하지 않는다.

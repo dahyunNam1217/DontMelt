@@ -1,4 +1,5 @@
 ﻿#include "Core/DMGameInstance.h"
+#include "Development/DMDevPIEMatch.h"
 
 #include "Core/DMMatchConstants.h"
 #include "Core/DMGameplayTags.h"
@@ -35,6 +36,21 @@
 #include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDMGameInstance, Log, All);
+
+#if WITH_EDITOR && !UE_BUILD_SHIPPING
+FGameInstancePIEResult UDMGameInstance::StartPlayInEditorGameInstance(
+    ULocalPlayer* LocalPlayer, const FGameInstancePIEParameters& Params)
+{
+    FGameInstancePIEParameters StartParams = Params;
+    FString Error;
+    if (!DMDevPIEMatch::BuildStartParameters(GetWorld(), Params, StartParams, Error))
+    {
+        UE_LOG(LogDMGameInstance, Error, TEXT("DMDevPIE start rejected: %s"), *Error);
+        return FGameInstancePIEResult::Failure(FText::FromString(Error));
+    }
+    return Super::StartPlayInEditorGameInstance(LocalPlayer, StartParams);
+}
+#endif
 
 #pragma region Last Match Result Storage
 

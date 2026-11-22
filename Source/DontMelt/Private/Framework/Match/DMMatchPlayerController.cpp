@@ -405,7 +405,7 @@ void ADMMatchPlayerController::ClientShowPreMatchTutorial_Implementation()
     SetInputMode(InputMode);
     bShowMouseCursor = true;
     bEnableClickEvents = true;
-    PreMatchTutorialWidget->SetKeyboardFocus();
+    PreMatchTutorialWidget->StartTutorialFocusTracking();
 
     if (!PreMatchTutorialWidget->IsInViewport())
     {
@@ -451,6 +451,7 @@ void ADMMatchPlayerController::ClosePreMatchTutorial()
     bPreMatchTutorialActive = false;
     if (IsValid(PreMatchTutorialWidget))
     {
+        PreMatchTutorialWidget->StopTutorialFocusTracking();
         PreMatchTutorialWidget->OnTutorialCompleted().RemoveAll(this);
         PreMatchTutorialWidget->RemoveFromParent();
         PreMatchTutorialWidget = nullptr;

@@ -1,6 +1,15 @@
 # 03. 캐릭터·입력·이동·자세·감정표현
 
-## P2 승인 동기화 — 2026-11-13
+## P3-9 최신 기준 — 2026-11-17
+
+기준 HEAD: `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. [최신 구현 대조와 검증 한계](../ImplementationStatus.md#p3-9--최신-아키텍처-결정-및-구현-대조-2026-11-17)를 함께 읽는다. 아래 최신 절과 충돌하는 P2/기존 본문은 당시 설계·조사 이력으로 보존하며 현재 완료 근거로 사용하지 않는다.
+
+- `Public/Characters/DMJellyCharacterBase.h` 기본값 WalkSpeed=200/SprintSpeed=500, `Private/Characters/DMJellyCharacterBase.cpp::PostInitializeComponents`의 MaxWalkSpeed 적용, `Private/Characters/Components/DMCharacterMovementComponent.cpp::GetMaxSpeed`의 Sprint 경로를 확인했다. Player/NPC는 이 공통 기반을 상속한다.
+- `Public/Data/DMMatchRuleDataAsset.h::DefaultNPCMultiplier=15`, GameMode 시작 인원×배율 스냅샷, `Private/AI/DMNPCPopulationDirector.cpp::InitializePopulation`의 1~60 검증을 확인했다. 2/3/4인 목표는30/45/60명이다.
+- `Private/Characters/Components/DMCharacterAudioComponent.cpp::CanPlayFootstepLocally`는 ADMPlayerCharacter만 허용한다. NPC 발소리 제거 정책은 기존 구현이며 이번 커밋이 새로 제거한 것으로 기록하지 않는다. BP 직접 재생·Sound Notify 우회는 미검증이다.
+- P3 커밋에서 P3-5에 해당하는 직접 변경은 규칙 DataAsset 헤더 주석의 4×10=40 → 4×15=60 정정이다. 이동·배율·발소리 동작은 이전부터 존재하던 코드를 재확인한 것이다. 에셋 기본값·실제 속도·수량·음향·60NPC 성능은 미검증이다.
+
+## P2 승인 동기화 — 2026-11-13 (당시 기록; 최신 기준은 상단 P3-9)
 
 이번 사용자 P2 요청의 명시 범위만 **설계 승인**으로 채택한다. 과거 승인으로 소급하지 않는다. 기준 HEAD는 `914173a`이며 구현 사실·설계 승인·에셋 적용·실행 검증은 별개다. 상세 근거와 미결정 사항은 [ImplementationStatus 10절](../ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)을 따른다.
 

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "AIController.h"
@@ -67,6 +67,13 @@ public:
 
     ADMJellyAIController();
 
+#if WITH_EDITOR
+    /** PIE 관찰 전용 조회이며 AI 판정과 상태를 변경하지 않는다. */
+    EDMNPCBehaviorState GetDiagnosticBehaviorState() const { return CurrentBehaviorState; }
+    /** 기본 비활성화인 편집기 전용 서버 진단 스위치. */
+    static bool IsDetailedNPCDiagnosticsEnabled();
+#endif
+
 #pragma endregion
 
 #pragma region External Reaction
@@ -97,6 +104,9 @@ protected:
     virtual void OnPossess(APawn* InPawn) override;
 
     virtual void OnUnPossess() override;
+#if WITH_EDITOR
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+#endif
 
 #pragma endregion
 
@@ -107,6 +117,24 @@ protected:
 #pragma endregion
 
 private:
+#if WITH_EDITOR
+    /** 게임 판정과 무관한 관찰 상태이며 복제하지 않는다. */
+    bool CanRecordNPCDiagnostics() const;
+    bool AllowNPCDiagnosticEvent();
+    void SampleNPCDiagnosticProgress();
+    void ClearNPCDiagnosticState();
+    FTimerHandle NPCDiagnosticTimer;
+    FVector NPCDiagnosticGoal = FVector::ZeroVector;
+    FVector NPCDiagnosticAnchor = FVector::ZeroVector;
+    uint32 NPCDiagnosticRequest = 0;
+    uint32 NPCDiagnosticSampleRequest = 0;
+    uint64 NPCDiagnosticAttempt = 0;
+    double NPCDiagnosticAnchorTime = -1.0;
+    double NPCDiagnosticLastReport = -1.0;
+    double NPCDiagnosticWindowStart = -1.0;
+    int32 NPCDiagnosticEventCount = 0;
+    int32 NPCDiagnosticSuppressed = 0;
+#endif
 #pragma region Behavior Profile
 
     /**

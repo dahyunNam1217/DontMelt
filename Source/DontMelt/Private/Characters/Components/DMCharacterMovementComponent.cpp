@@ -1,4 +1,12 @@
-﻿#include "Characters/Components/DMCharacterMovementComponent.h"
+#include "Characters/Components/DMCharacterMovementComponent.h"
+#if WITH_EDITOR
+#include "Development/DMNPCMovementDiagnostics.h"
+#include "Characters/DMNPCCharacter.h"
+#include "Characters/DMJellyAIController.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "Engine/World.h"
+#include "Components/PrimitiveComponent.h"
+#endif
 
 #include "Characters/DMJellyCharacterBase.h"
 #include "Characters/Components/DMCharacterStateComponent.h"
@@ -168,6 +176,9 @@ void UDMCharacterMovementComponent::OnMovementUpdated(
 )
 {
     Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+#if WITH_EDITOR
+    DMNPCMovementDiagnostics::RecordMovement(this, DeltaSeconds);
+#endif
 
     /*
      * Quest-relevant sprint events are server-only.
@@ -245,3 +256,49 @@ FNetworkPredictionData_Client* UDMCharacterMovementComponent::GetPredictionData_
 }
 
 #pragma endregion
+#if WITH_EDITOR
+void UDMCharacterMovementComponent::OnCharacterStuckInGeometry(const FHitResult* Hit)
+{
+    DMNPCMovementDiagnostics::RecordStuck(this, Hit);
+    Super::OnCharacterStuckInGeometry(Hit);
+}
+#endif
+
+#if WITH_EDITOR
+void UDMCharacterMovementComponent::HandleImpact(const FHitResult& Hit, const float TimeSlice, const FVector& MoveDelta)
+{
+    // 부모 처리 전 충돌 정보를 관측하되 모든 경우 부모를 정확히 한 번 호출한다.
+    if (ADMJellyAIController::IsDetailedNPCDiagnosticsEnabled() && IsValid(CharacterOwner)
+        && CharacterOwner->HasAuthority() && CharacterOwner->IsA<ADMNPCCharacter>()
+        && GetWorld() && GetWorld()->IsGameWorld() && GetWorld()->GetNetMode() != NM_Client)
+    {
+        const double Now = GetWorld()->GetTimeSeconds();
+        if (NPCDiagnosticLastImpactTime < 0.0 || Now - NPCDiagnosticLastImpactTime >= 1.0)
+        {
+            const ADMJellyAIController* AI = Cast<ADMJellyAIController>(CharacterOwner->GetController());
+            const UPathFollowingComponent* Path = AI ? AI->GetPathFollowingComponent() : nullptr;
+            const bool bHasRequest = Path && Path->GetCurrentRequestId().IsValid();
+            UE_LOG(LogTemp, Log,
+                TEXT("[NPCDetail] Impact World=%s Time=%.6f NPC=%s HasRequest=%d Request=%u HitActor=%s HitComponent=%s Location=%s ImpactPoint=%s ImpactNormal=%s Normal=%s Blocking=%d StartPenetrating=%d Depth=%.3f Pos=%s Velocity=%s Mode=%d TimeSlice=%.6f MoveDelta=%s Suppressed=%u"),
+                *GetNameSafe(GetWorld()), Now, *GetNameSafe(CharacterOwner), bHasRequest,
+                bHasRequest ? uint32(Path->GetCurrentRequestId()) : 0, *GetPathNameSafe(Hit.GetActor()),
+                *GetPathNameSafe(Hit.GetComponent()), *Hit.Location.ToString(), *Hit.ImpactPoint.ToString(),
+                *Hit.ImpactNormal.ToString(), *Hit.Normal.ToString(), int32(Hit.bBlockingHit),
+                int32(Hit.bStartPenetrating), Hit.PenetrationDepth, *CharacterOwner->GetActorLocation().ToString(),
+                *Velocity.ToString(), int32(MovementMode), TimeSlice, *MoveDelta.ToString(), NPCDiagnosticSuppressedImpacts);
+            NPCDiagnosticLastImpactTime = Now;
+            NPCDiagnosticSuppressedImpacts = 0;
+        }
+        else
+        {
+            ++NPCDiagnosticSuppressedImpacts;
+        }
+    }
+    else
+    {
+        NPCDiagnosticLastImpactTime = -1.0;
+        NPCDiagnosticSuppressedImpacts = 0;
+    }
+    Super::HandleImpact(Hit, TimeSlice, MoveDelta);
+}
+#endif

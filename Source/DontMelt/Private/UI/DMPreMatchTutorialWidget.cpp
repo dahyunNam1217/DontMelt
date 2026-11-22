@@ -1,4 +1,4 @@
-﻿#include "UI/DMPreMatchTutorialWidget.h"
+#include "UI/DMPreMatchTutorialWidget.h"
 
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -6,6 +6,16 @@
 #include "InputCoreTypes.h"
 #include "Input/Events.h"
 #include "Input/Reply.h"
+#include "Engine/LocalPlayer.h"
+#include "Engine/GameViewportClient.h"
+#include "GameFramework/PlayerController.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Framework/Application/SlateUser.h"
+#include "Layout/WidgetPath.h"
+#include "Widgets/SViewport.h"
+#include "Widgets/SWindow.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogDMTutorialFocus, Log, All);
 
 UDMPreMatchTutorialWidget::UDMPreMatchTutorialWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -42,7 +52,7 @@ void UDMPreMatchTutorialWidget::NativeOnInitialized()
 
 void UDMPreMatchTutorialWidget::NativeDestruct()
 {
-    if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SpaceSkipTimer);
+    StopTutorialFocusTracking();
     TutorialCompletedDelegate.Clear();
     Super::NativeDestruct();
 }
@@ -85,13 +95,15 @@ void UDMPreMatchTutorialWidget::CompleteTutorial()
 {
     if (bCompleted) return;
     bCompleted = true;
-    if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SpaceSkipTimer);
+    CancelSpaceHold(TEXT("Completed"));
+    UE_LOG(LogDMTutorialFocus, Log, TEXT("Tutorial completed once. Owner=%s"), *GetNameSafe(GetOwningPlayer()));
     RefreshPage();
     TutorialCompletedDelegate.Broadcast();
 }
 
 void UDMPreMatchTutorialWidget::MarkWaitingForOtherPlayers()
 {
+    CancelSpaceHold(TEXT("Waiting"));
     const FText WaitingMessage = FText::FromString(TEXT("다른 플레이어의 튜토리얼 완료를 기다리는 중..."));
     if (IsValid(TXT_Waiting))
     {
@@ -118,14 +130,27 @@ FReply UDMPreMatchTutorialWidget::NativeOnMouseButtonDown(
     return Super::NativeOnMouseButtonDown(Geometry, MouseEvent);
 }
 
+FReply UDMPreMatchTutorialWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent)
+{
+    // 자식 버튼이 Space를 클릭 입력으로 소비하기 전에 튜토리얼 홀드를 처리한다.
+    if (KeyEvent.GetKey() == EKeys::SpaceBar)
+    {
+        return NativeOnKeyDown(Geometry, KeyEvent);
+    }
+    return Super::NativeOnPreviewKeyDown(Geometry, KeyEvent);
+}
+
 FReply UDMPreMatchTutorialWidget::NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent)
 {
-    if (!bCompleted && KeyEvent.GetKey() == EKeys::SpaceBar)
+    if (KeyEvent.GetKey() == EKeys::SpaceBar && IsFocusTrackingValid())
     {
-        if (UWorld* World = GetWorld(); World && !World->GetTimerManager().IsTimerActive(SpaceSkipTimer))
+        // 포커스 상실 후 놓침 이벤트를 못 받았어도 자동 반복으로 홀드를 재시작하지 않는다.
+        if (!bCompleted && !KeyEvent.IsRepeat() && !bSpaceHeld && IsOwningWindowActive() && HasTutorialUserFocus())
         {
-            World->GetTimerManager().SetTimer(SpaceSkipTimer, this,
+            bSpaceHeld = true;
+            GetWorld()->GetTimerManager().SetTimer(SpaceSkipTimer, this,
                 &ThisClass::HandleSpaceSkipHoldComplete, FMath::Max(0.2f, SkipHoldSeconds), false);
+            UE_LOG(LogDMTutorialFocus, Log, TEXT("Space hold started. Owner=%s"), *GetNameSafe(GetOwningPlayer()));
         }
         return FReply::Handled();
     }
@@ -136,13 +161,142 @@ FReply UDMPreMatchTutorialWidget::NativeOnKeyUp(const FGeometry& Geometry, const
 {
     if (KeyEvent.GetKey() == EKeys::SpaceBar)
     {
-        if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SpaceSkipTimer);
+        UE_LOG(LogDMTutorialFocus, Log, TEXT("Space key released. Owner=%s"), *GetNameSafe(GetOwningPlayer()));
+        CancelSpaceHold(TEXT("KeyUp"));
         return FReply::Handled();
     }
     return Super::NativeOnKeyUp(Geometry, KeyEvent);
 }
 
+void UDMPreMatchTutorialWidget::CancelSpaceHold(const TCHAR* Reason)
+{
+    if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SpaceSkipTimer);
+    if (bSpaceHeld)
+    {
+        UE_LOG(LogDMTutorialFocus, Log, TEXT("Space hold canceled. Owner=%s Reason=%s"), *GetNameSafe(GetOwningPlayer()), Reason);
+    }
+    bSpaceHeld = false;
+}
+
 void UDMPreMatchTutorialWidget::HandleSpaceSkipHoldComplete()
 {
-    CompleteTutorial();
+    if (bSpaceHeld && IsFocusTrackingValid() && IsOwningWindowActive() && HasTutorialUserFocus())
+    {
+        CompleteTutorial();
+    }
+    else
+    {
+        CancelSpaceHold(TEXT("ExpiredWithoutFocus"));
+    }
+}
+
+bool UDMPreMatchTutorialWidget::IsFocusTrackingValid() const
+{
+    const APlayerController* Owner = GetOwningPlayer();
+    return bFocusTrackingActive && IsInViewport() && GetCachedWidget().IsValid()
+        && IsValid(GetWorld()) && IsValid(Owner) && Owner->IsLocalController() && FSlateApplication::IsInitialized();
+}
+
+bool UDMPreMatchTutorialWidget::IsOwningWindowActive() const
+{
+    if (!IsFocusTrackingValid()) return false;
+    const TSharedPtr<SWindow> Window = FSlateApplication::Get().FindWidgetWindow(GetCachedWidget().ToSharedRef());
+    return Window.IsValid() && FSlateApplication::Get().IsActive()
+        && Window == FSlateApplication::Get().GetActiveTopLevelWindow();
+}
+
+bool UDMPreMatchTutorialWidget::HasTutorialUserFocus() const
+{
+    return HasUserFocus(GetOwningPlayer()) || HasUserFocusedDescendants(GetOwningPlayer());
+}
+
+void UDMPreMatchTutorialWidget::StartTutorialFocusTracking()
+{
+    if (bFocusTrackingActive || !FSlateApplication::IsInitialized()) return;
+    bFocusTrackingActive = true;
+    if (!IsFocusTrackingValid())
+    {
+        bFocusTrackingActive = false;
+        return;
+    }
+    FocusChangingHandle = FSlateApplication::Get().OnFocusChanging().AddUObject(this, &ThisClass::HandleSlateFocusChanging);
+    ApplicationActivationHandle = FSlateApplication::Get().OnApplicationActivationStateChanged().AddUObject(
+        this, &ThisClass::HandleApplicationActivationChanged);
+    if (IsOwningWindowActive()) SetUserFocus(GetOwningPlayer());
+}
+
+void UDMPreMatchTutorialWidget::StopTutorialFocusTracking()
+{
+    bFocusTrackingActive = false;
+    CancelSpaceHold(TEXT("Closed"));
+    if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(FocusRestoreTimer);
+    PendingViewportFocus.Reset();
+    if (FSlateApplication::IsInitialized())
+    {
+        FSlateApplication::Get().OnFocusChanging().Remove(FocusChangingHandle);
+        FSlateApplication::Get().OnApplicationActivationStateChanged().Remove(ApplicationActivationHandle);
+    }
+    FocusChangingHandle.Reset();
+    ApplicationActivationHandle.Reset();
+}
+
+void UDMPreMatchTutorialWidget::HandleSlateFocusChanging(const FFocusEvent& Event, const FWeakWidgetPath& OldPath,
+    const TSharedPtr<SWidget>& OldWidget, const FWidgetPath& NewPath, const TSharedPtr<SWidget>& NewWidget)
+{
+    if (!IsFocusTrackingValid()) return;
+    const ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
+    const TSharedPtr<const FSlateUser> User = LocalPlayer ? LocalPlayer->GetSlateUser() : nullptr;
+    if (!User.IsValid() || Event.GetUser() != User->GetUserIndex()) return;
+
+    if (OldPath.ContainsWidget(GetCachedWidget().Get()) && OldWidget != NewWidget)
+    {
+        CancelSpaceHold(TEXT("FocusChanged"));
+    }
+    // 다른 UI·다른 PIE 창으로 이동한 포커스를 빼앗지 않는다.
+    // 소유 뷰포트 자체가 대상인 경우만 이벤트 완료 후 한 번 복구한다.
+    QueueViewportFocusRestore(NewWidget);
+}
+
+void UDMPreMatchTutorialWidget::QueueViewportFocusRestore(const TSharedPtr<SWidget>& Target)
+{
+    const ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
+    const UGameViewportClient* Viewport = LocalPlayer ? LocalPlayer->ViewportClient : nullptr;
+    const TSharedPtr<SViewport> ViewportWidget = Viewport ? Viewport->GetGameViewportWidget() : nullptr;
+    if (!IsFocusTrackingValid() || !Target.IsValid() || Target != ViewportWidget) return;
+    PendingViewportFocus = Target;
+    if (!FocusRestoreTimer.IsValid())
+    {
+        // Slate는 OnFocusChanging broadcast 이후 새 경로를 저장한다. 콜백 안의 재귀 변경을 피한다.
+        FocusRestoreTimer = GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::RestoreTutorialFocus);
+    }
+}
+
+void UDMPreMatchTutorialWidget::RestoreTutorialFocus()
+{
+    FocusRestoreTimer.Invalidate();
+    const TSharedPtr<SWidget> Target = PendingViewportFocus.Pin();
+    PendingViewportFocus.Reset();
+    if (!IsOwningWindowActive() || !Target.IsValid()) return;
+    const ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
+    const TSharedPtr<const FSlateUser> User = LocalPlayer ? LocalPlayer->GetSlateUser() : nullptr;
+    if (!User.IsValid() || User->GetFocusedWidget() != Target) return;
+    SetUserFocus(GetOwningPlayer());
+    UE_LOG(LogDMTutorialFocus, Log, TEXT("Tutorial focus restored. Owner=%s User=%d"), *GetNameSafe(GetOwningPlayer()), User->GetUserIndex());
+}
+
+void UDMPreMatchTutorialWidget::HandleApplicationActivationChanged(bool bActive)
+{
+    if (!IsFocusTrackingValid()) return;
+    if (!bActive)
+    {
+        CancelSpaceHold(TEXT("ApplicationDeactivated"));
+        GetWorld()->GetTimerManager().ClearTimer(FocusRestoreTimer);
+        PendingViewportFocus.Reset();
+    }
+    else
+    {
+        const ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
+        const TSharedPtr<const FSlateUser> User = LocalPlayer ? LocalPlayer->GetSlateUser() : nullptr;
+        if (User.IsValid()) QueueViewportFocusRestore(User->GetFocusedWidget());
+    }
 }

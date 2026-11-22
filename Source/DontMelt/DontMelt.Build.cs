@@ -31,9 +31,16 @@ public class DontMelt : ModuleRules
             new string[]
             {
                 "EngineSettings",
-                "OnlineSubsystemUtils"
+                "OnlineSubsystemUtils",
+                "Slate"
             }
         );
+
+        // PIE 시작 매개변수와 Editor 설정 접근은 Editor 타깃에만 포함한다.
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.Add("UnrealEd");
+        }
 
         // Steam 온라인 서브시스템을 동적으로 로드한다.
         DynamicallyLoadedModuleNames.Add("OnlineSubsystemSteam");

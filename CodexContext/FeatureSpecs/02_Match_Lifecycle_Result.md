@@ -1,6 +1,18 @@
 # 02. 경기 흐름·승패·결과 전달
 
-## P2 승인 동기화 — 2026-11-13
+## P3-9 최신 기준 — 2026-11-17
+
+기준 HEAD: `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. [최신 구현 대조와 검증 한계](../ImplementationStatus.md#p3-9--최신-아키텍처-결정-및-구현-대조-2026-11-17)를 함께 읽는다. 아래 최신 절과 충돌하는 P2/기존 본문은 당시 설계·조사 이력으로 보존하며 현재 완료 근거로 사용하지 않는다.
+
+- `Private/UI/DMPlayerResultRowWidget.cpp::SetResultEntry`는 `RelicCount`와 `AcquiredRelicCount`를 각각 표시한다. `Public/UI/DMPlayerResultRowWidget.h`의 `TXT_AcquiredRelicCount`는 **BindWidget 필수**이며 기존 필수 항목과 하나라도 없으면 Row 갱신이 반환된다. WBP 변수·형식·부모 연결은 미검증이다.
+- `Private/Framework/Match/DMMatchGameMode.cpp::BuildFinalPlayerResults(EndReason, WinningBaseSlot)`는 전멸 종료에만 `SortAndRankResults(..., true)`를 전달한다. 승자는 단독1위, 나머지는 등록 수 내림차순 공동 순위(예:1·2·2·4), 일반 종료는 등록 수 순위다.
+- `Private/Tests/DMMatchResultRulesTests.cpp`의 `DontMelt.Match.ResultRules.EliminationRanking` 추가를 확인했다. 승자 등록 수 0/2/5, 전원0, 통계 보존, 반복 정렬, 일반 종료 비고정을 검사한다. 테스트 실행은 미실행이다.
+- `Public/Framework/Match/DMMatchGameMode.h::StartingRosterTimeoutSeconds` 기본값은 **90.0f**다. 서버 `StartPlay`에서 Waiting·종료 사유 None·미확정 명단·비활성 Timer 조건으로 설정한다. 클라이언트별 로딩 시작 시각 기준이 아니다.
+- `IsStartingRosterComplete`는 기대 인원, 유효 PlayerState·고유 BaseSlot·Alive·Pawn/Controller/PlayerState 양방향 연결을 검사한다. `HandleStartingNewPlayer_Implementation`도 Spawn/Possess 및 PlayerState 연결을 확인한다.
+- `HandleStartingRosterTimeout`은 단발 Timer를 정리하고 ArrivalOrRosterIncomplete / ParticipantPreparationFailed / RequiredInitializationIncomplete를 로그로 구분한 뒤 기존 **InternalError** 중단 경로를 호출한다. 미도착을 이탈로 확정하지 않는다.
+- `TryFinalizeStartingRoster`는 리스폰 지점, NPC·유물·퀘스트·이벤트 초기화를 확인한 후 Timer 해제와 튜토리얼 게이트로 진행한다. 실패는 `FailStartingRosterFinalization`의 역순 정리 및 중단 경로다. 튜토리얼 기본300초는 별도다. BP 제한값·사용자 안내·실제 실패 재현은 미검증이다.
+
+## P2 승인 동기화 — 2026-11-13 (당시 기록; 최신 기준은 상단 P3-9)
 
 이번 사용자 P2 요청의 명시 범위만 **설계 승인**으로 채택한다. 과거 승인으로 소급하지 않는다. 기준 HEAD는 `914173a`이며 구현 사실·설계 승인·에셋 적용·실행 검증은 별개다. 상세 근거와 미결정 사항은 [ImplementationStatus 10절](../ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)을 따른다.
 

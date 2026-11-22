@@ -48,6 +48,11 @@ public:
     virtual void Init() override;
     virtual void Shutdown() override;
 
+#if WITH_EDITOR && !UE_BUILD_SHIPPING
+    virtual FGameInstancePIEResult StartPlayInEditorGameInstance(
+        ULocalPlayer* LocalPlayer, const FGameInstancePIEParameters& Params) override;
+#endif
+
 #pragma endregion
 
 #pragma region Local Audio Settings

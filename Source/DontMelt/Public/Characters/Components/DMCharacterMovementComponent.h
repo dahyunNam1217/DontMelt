@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -28,6 +28,11 @@ public:
     }
 
     virtual float GetMaxSpeed() const override;
+#if WITH_EDITOR
+    virtual void OnCharacterStuckInGeometry(const FHitResult* Hit) override;
+    virtual void HandleImpact(const FHitResult& Hit, float TimeSlice = 0.f,
+        const FVector& MoveDelta = FVector::ZeroVector) override;
+#endif
 
     virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 
@@ -37,6 +42,11 @@ protected:
     virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 
 private:
+#if WITH_EDITOR
+    // 충돌 처리에는 사용하지 않는 진단 출력 제한 상태.
+    double NPCDiagnosticLastImpactTime = -1.0;
+    uint32 NPCDiagnosticSuppressedImpacts = 0;
+#endif
     bool IsAuthoritativeSprintActive() const;
 
     bool bWasAuthoritativeSprinting = false;

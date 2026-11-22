@@ -1,4 +1,6 @@
 ﻿#include "Framework/Match/DMMatchGameMode.h"
+#include "Development/DMDevPIEMatch.h"
+#include "Engine/NetDriver.h"
 
 #include "Core/DMGameplayUtils.h"
 #include "Core/DMMatchConstants.h"
@@ -52,9 +54,13 @@ namespace
     constexpr float RelicRevealLeadSeconds = 60.0f;
     constexpr float RelicRevealDurationSeconds = 3.0f;
 
-    bool ShouldEnforceSteamMatchRoster(const UWorld* World)
+    bool ShouldEnforceSteamMatchRoster(const UWorld* World, const FString& MatchOptions)
     {
 #if WITH_EDITOR
+        if (DMDevPIEMatch::IsEnabled(World, MatchOptions))
+        {
+            return false;
+        }
         if (World != nullptr && World->WorldType == EWorldType::PIE && World->GetNetMode() == NM_Standalone)
         {
             return false;
@@ -125,6 +131,19 @@ void ADMMatchGameMode::InitGame(const FString& MapName, const FString& Options, 
 
 void ADMMatchGameMode::StartPlay()
 {
+    if (DMDevPIEMatch::IsEnabled(GetWorld(), OptionsString))
+    {
+        const UNetDriver* Driver = GetWorld()->GetNetDriver();
+        if (Driver == nullptr || Driver->GetNetMode() != NM_ListenServer)
+        {
+            bMatchInitializationFailed = true;
+            UE_LOG(LogDMMatchGameMode, Error, TEXT("DMDevPIE failed: actual Listen NetDriver is unavailable."));
+        }
+        else
+        {
+            UE_LOG(LogDMMatchGameMode, Log, TEXT("DMDevPIE active: actual Listen NetDriver=%s. Steam roster is untouched; local two-player test only."), *Driver->GetName());
+        }
+    }
     Super::StartPlay();
 
     if (bMatchInitializationFailed)
@@ -242,7 +261,7 @@ bool ADMMatchGameMode::ParseExpectedPlayerCount(const FString& Options, FString&
 
 bool ADMMatchGameMode::PrepareApprovedMatchRoster(FString& OutErrorMessage)
 {
-    if (!ShouldEnforceSteamMatchRoster(GetWorld()))
+    if (!ShouldEnforceSteamMatchRoster(GetWorld(), OptionsString))
     {
         return true;
     }
@@ -285,8 +304,15 @@ void ADMMatchGameMode::PreLogin(
         return;
     }
 
+    if (DMDevPIEMatch::IsEnabled(GetWorld(), OptionsString) && !DMDevPIEMatch::IsLoopbackAddress(Address))
+    {
+        ErrorMessage = TEXT("DMDevPIE accepts loopback connections only.");
+        UE_LOG(LogDMMatchGameMode, Warning, TEXT("DMDevPIE rejected non-loopback admission."));
+        return;
+    }
+
     // 로비에서 승인된 사용자만 새 매치에 입장시킨다.
-    if (ShouldEnforceSteamMatchRoster(GetWorld()))
+    if (ShouldEnforceSteamMatchRoster(GetWorld(), OptionsString))
     {
         UGameInstance* GameInstance = GetGameInstance();
 
@@ -389,7 +415,7 @@ void ADMMatchGameMode::PostLogin(APlayerController* NewPlayer)
         return;
     }
 
-    if (ShouldEnforceSteamMatchRoster(GetWorld()))
+    if (ShouldEnforceSteamMatchRoster(GetWorld(), OptionsString))
     {
         UGameInstance* GameInstance = GetGameInstance();
 
@@ -465,7 +491,7 @@ void ADMMatchGameMode::PostLogin(APlayerController* NewPlayer)
         return;
     }
 
-    if (ShouldEnforceSteamMatchRoster(GetWorld()))
+    if (ShouldEnforceSteamMatchRoster(GetWorld(), OptionsString))
     {
         UGameInstance* GameInstance = GetGameInstance();
 
@@ -500,6 +526,13 @@ void ADMMatchGameMode::PostLogin(APlayerController* NewPlayer)
      * 기본 PostLogin → HandleStartingNewPlayer 흐름을 실행한다.
      */
     Super::PostLogin(NewPlayer);
+    if (DMDevPIEMatch::IsEnabled(GetWorld(), OptionsString))
+    {
+        UE_LOG(LogDMMatchGameMode, Log,
+            TEXT("DMDevPIE participant: PC=%s PS=%s Pawn=%s BaseSlot=%d PlatformIdValid=%d Local=%d"),
+            *GetNameSafe(NewPlayer), *GetNameSafe(MatchPlayerState), *GetNameSafe(NewPlayer->GetPawn()),
+            MatchPlayerState->GetBaseSlot(), MatchPlayerState->GetUniqueId().IsValid(), NewPlayer->IsLocalController());
+    }
 }
 
 void ADMMatchGameMode::Logout(AController* Exiting)
@@ -3600,6 +3633,12 @@ void ADMMatchGameMode::HandleRestartMatchRequest(ADMMatchPlayerController* Reque
         return;
     }
 
+    if (DMDevPIEMatch::IsEnabled(GetWorld(), OptionsString))
+    {
+        UE_LOG(LogDMMatchGameMode, Log, TEXT("DMDevPIE rematch is unsupported. Stop and restart PIE for a fresh local test."));
+        return;
+    }
+
     const FString TravelURL =
         FString::Printf(TEXT("%s?listen?ExpectedPlayers=%d"), *CurrentMatchMapPackageName, StartingPlayerCountSnapshot);
 
@@ -3820,6 +3859,13 @@ void ADMMatchGameMode::RecoverFromResultTravelFailure(const FString& Diagnostic)
 
 void ADMMatchGameMode::HandleResultAutoReturnExpired()
 {
+    if (DMDevPIEMatch::IsEnabled(GetWorld(), OptionsString))
+    {
+        // Steam 로비 복귀를 흉내 내지 않는다. 결과 확인 후 PIE를 종료해 새 월드로 반복한다.
+        UE_LOG(LogDMMatchGameMode, Log, TEXT("DMDevPIE result retained. Stop PIE to finish the local test; Steam lobby return is unsupported."));
+        return;
+    }
+
     if (bResultTravelCommitted || bResultTravelPending)
     {
         return;

@@ -1,4 +1,4 @@
-﻿#include "Characters/DMJellyAIController.h"
+#include "Characters/DMJellyAIController.h"
 
 #include "Characters/DMNPCCharacter.h"
 #include "Characters/Components/DMCharacterMovementComponent.h"
@@ -14,10 +14,27 @@
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
+#if WITH_EDITOR
+#include "HAL/IConsoleManager.h"
+#include "Misc/ScopeExit.h"
+#endif
 #include "NavigationSystem.h"
 #include "Navigation/PathFollowingComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDMJellyAIController, Log, All);
+
+#if WITH_EDITOR
+namespace
+{
+    TAutoConsoleVariable<int32> CVarDMNPCDetail(
+        TEXT("DM.NPCDiag.Detail"), 0, TEXT("Editor server NPC diagnostics: 0 off, 1 on."), ECVF_Default);
+    // 게임 규칙이 아닌 관측 기준: 초당 표본, 삼차원 변위와 지속 시간.
+    constexpr float NPCDiagnosticSampleSeconds = 1.0f;
+    constexpr double NPCDiagnosticDistanceCm = 10.0;
+    constexpr double NPCDiagnosticStallSeconds = 3.0;
+    constexpr double NPCDiagnosticRepeatSeconds = 5.0;
+}
+#endif
 
 namespace DMJellyAIControllerPrivate
 {
@@ -148,6 +165,9 @@ void ADMJellyAIController::OnPossess(APawn* InPawn)
 
 void ADMJellyAIController::OnUnPossess()
 {
+#if WITH_EDITOR
+    ClearNPCDiagnosticState();
+#endif
     /*
      * StopMovement()로 발생할 수 있는 Callback이
      * 새로운 행동을 예약하지 못하도록
@@ -1199,8 +1219,47 @@ bool ADMJellyAIController::TryStartNavigationMove(
      */
     MovementComponent->SetSprintRequested(bSprint);
 
+#if WITH_EDITOR
+    const bool bRecordMove = CanRecordNPCDiagnostics();
+    const uint64 DiagnosticAttempt = bRecordMove ? ++NPCDiagnosticAttempt : 0;
+    // 이전 요청의 동기 완료가 발생할 수 있으므로 새 목표는 반환 이후에 연결한다.
+    if (bRecordMove && AllowNPCDiagnosticEvent())
+    {
+        UE_LOG(LogDMJellyAIController, Log,
+            TEXT("[NPCDetail] RequestBegin World=%s Time=%.6f NPC=%s Attempt=%llu Pos=%s Goal=%s Acceptance=%.3f State=%d RequestedState=%d"),
+            *GetNameSafe(GetWorld()), GetWorld()->GetTimeSeconds(), *GetNameSafe(GetPawn()), DiagnosticAttempt,
+            *GetPawn()->GetActorLocation().ToString(), *Destination.ToString(), AcceptanceRadius,
+            int32(CurrentBehaviorState), int32(MovingState));
+    }
+#endif
+
     const EPathFollowingRequestResult::Type MoveResult =
         MoveToLocation(Destination, AcceptanceRadius, true, true, true, false, nullptr, false);
+
+#if WITH_EDITOR
+    if (bRecordMove)
+    {
+        const UPathFollowingComponent* Path = GetPathFollowingComponent();
+        const bool bHasRequest = MoveResult == EPathFollowingRequestResult::RequestSuccessful && Path != nullptr;
+        if (bHasRequest)
+        {
+            NPCDiagnosticRequest = uint32(Path->GetCurrentRequestId());
+            NPCDiagnosticGoal = Destination;
+            if (!GetWorldTimerManager().IsTimerActive(NPCDiagnosticTimer))
+            {
+                GetWorldTimerManager().SetTimer(NPCDiagnosticTimer, this,
+                    &ADMJellyAIController::SampleNPCDiagnosticProgress, NPCDiagnosticSampleSeconds, true);
+            }
+        }
+        if (AllowNPCDiagnosticEvent())
+        {
+            UE_LOG(LogDMJellyAIController, Log,
+                TEXT("[NPCDetail] RequestEnd World=%s Time=%.6f NPC=%s Attempt=%llu Result=%d HasRequest=%d Request=%u Goal=%s"),
+                *GetNameSafe(GetWorld()), GetWorld()->GetTimeSeconds(), *GetNameSafe(GetPawn()), DiagnosticAttempt,
+                int32(MoveResult), bHasRequest, bHasRequest ? NPCDiagnosticRequest : 0, *Destination.ToString());
+        }
+    }
+#endif
 
     switch (MoveResult)
     {
@@ -1231,6 +1290,32 @@ bool ADMJellyAIController::TryStartNavigationMove(
 
 void ADMJellyAIController::OnMoveCompleted(const FAIRequestID RequestID, const FPathFollowingResult& Result)
 {
+#if WITH_EDITOR
+    const bool bRecordCompletion = CanRecordNPCDiagnostics() && AllowNPCDiagnosticEvent();
+    const EDMNPCBehaviorState DiagnosticPreviousState = CurrentBehaviorState;
+    const bool bKnownGoal = NPCDiagnosticRequest == uint32(RequestID);
+    const FVector DiagnosticGoal = NPCDiagnosticGoal;
+    if (bRecordCompletion)
+    {
+        UE_LOG(LogDMJellyAIController, Log,
+            TEXT("[NPCDetail] CompleteBegin World=%s Time=%.6f NPC=%s Request=%u Result=%d Flags=%u Pos=%s Velocity=%s KnownGoal=%d Goal=%s PreviousState=%d"),
+            *GetNameSafe(GetWorld()), GetWorld()->GetTimeSeconds(), *GetNameSafe(GetPawn()), uint32(RequestID),
+            int32(Result.Code), uint32(Result.Flags), *GetPawn()->GetActorLocation().ToString(),
+            *GetPawn()->GetVelocity().ToString(), bKnownGoal, *DiagnosticGoal.ToString(), int32(DiagnosticPreviousState));
+    }
+    // 모든 조기 반환 이후 실제 예약 상태를 기록하며 기존 분기나 난수를 건드리지 않는다.
+    ON_SCOPE_EXIT
+    {
+        if (bRecordCompletion && IsValid(GetWorld()))
+        {
+            UE_LOG(LogDMJellyAIController, Log,
+                TEXT("[NPCDetail] CompleteEnd World=%s Time=%.6f NPC=%s Request=%u State=%d NextTimerActive=%d NextTimerRemaining=%.6f"),
+                *GetNameSafe(GetWorld()), GetWorld()->GetTimeSeconds(), *GetNameSafe(GetPawn()), uint32(RequestID),
+                int32(CurrentBehaviorState), GetWorldTimerManager().IsTimerActive(BehaviorTimerHandle),
+                GetWorldTimerManager().GetTimerRemaining(BehaviorTimerHandle));
+        }
+    };
+#endif
     Super::OnMoveCompleted(RequestID, Result);
 
     const EDMNPCBehaviorState CompletedMoveState = CurrentBehaviorState;
@@ -1374,3 +1459,106 @@ void ADMJellyAIController::TransitionToBehaviorState(const EDMNPCBehaviorState N
 }
 
 #pragma endregion
+#if WITH_EDITOR
+bool ADMJellyAIController::IsDetailedNPCDiagnosticsEnabled()
+{
+    return CVarDMNPCDetail.GetValueOnGameThread() == 1;
+}
+
+bool ADMJellyAIController::CanRecordNPCDiagnostics() const
+{
+    return IsDetailedNPCDiagnosticsEnabled() && HasAuthority() && IsValid(GetWorld())
+        && GetWorld()->IsGameWorld() && GetWorld()->GetNetMode() != NM_Client
+        && IsValid(Cast<ADMNPCCharacter>(GetPawn()));
+}
+
+bool ADMJellyAIController::AllowNPCDiagnosticEvent()
+{
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (NPCDiagnosticWindowStart < 0.0 || Now - NPCDiagnosticWindowStart >= 1.0)
+    {
+        if (NPCDiagnosticSuppressed > 0)
+        {
+            UE_LOG(LogDMJellyAIController, Log, TEXT("[NPCDetail] EventLimit World=%s Time=%.6f NPC=%s Suppressed=%d"),
+                *GetNameSafe(GetWorld()), Now, *GetNameSafe(GetPawn()), NPCDiagnosticSuppressed);
+        }
+        NPCDiagnosticWindowStart = Now;
+        NPCDiagnosticEventCount = 0;
+        NPCDiagnosticSuppressed = 0;
+    }
+    if (++NPCDiagnosticEventCount <= 20)
+    {
+        return true;
+    }
+    ++NPCDiagnosticSuppressed;
+    return false;
+}
+
+void ADMJellyAIController::SampleNPCDiagnosticProgress()
+{
+    if (!CanRecordNPCDiagnostics())
+    {
+        ClearNPCDiagnosticState();
+        return;
+    }
+    const UPathFollowingComponent* Path = GetPathFollowingComponent();
+    const bool bMovingBehavior = CurrentBehaviorState == EDMNPCBehaviorState::Moving
+        || CurrentBehaviorState == EDMNPCBehaviorState::RelicApproachMoving
+        || CurrentBehaviorState == EDMNPCBehaviorState::FleeMoving
+        || CurrentBehaviorState == EDMNPCBehaviorState::PanicMoving;
+    if (!Path || Path->GetStatus() != EPathFollowingStatus::Moving || !bMovingBehavior)
+    {
+        // 의도된 대기는 정체 시간에 포함하지 않는다.
+        NPCDiagnosticAnchorTime = -1.0;
+        return;
+    }
+    const double Now = GetWorld()->GetTimeSeconds();
+    const FVector Position = GetPawn()->GetActorLocation();
+    const uint32 Request = uint32(Path->GetCurrentRequestId());
+    if (NPCDiagnosticAnchorTime < 0.0 || Request != NPCDiagnosticSampleRequest
+        || FVector::DistSquared(Position, NPCDiagnosticAnchor) >= FMath::Square(NPCDiagnosticDistanceCm))
+    {
+        NPCDiagnosticAnchor = Position;
+        NPCDiagnosticAnchorTime = Now;
+        NPCDiagnosticSampleRequest = Request;
+        NPCDiagnosticLastReport = -1.0;
+        return;
+    }
+    if (Now - NPCDiagnosticAnchorTime >= NPCDiagnosticStallSeconds
+        && (NPCDiagnosticLastReport < 0.0 || Now - NPCDiagnosticLastReport >= NPCDiagnosticRepeatSeconds))
+    {
+        NPCDiagnosticLastReport = Now;
+        const FNavPathSharedPtr NavPath = Path->GetPath();
+        const ADMNPCCharacter* NPC = Cast<ADMNPCCharacter>(GetPawn());
+        UE_LOG(LogDMJellyAIController, Log,
+            TEXT("[NPCDetail] NoProgress World=%s Time=%.6f NPC=%s Request=%u Duration=%.3f Pos=%s Velocity=%s KnownGoal=%d Goal=%s SegmentTarget=%s State=%d PathStatus=%d PathValid=%d Partial=%d Mode=%d"),
+            *GetNameSafe(GetWorld()), Now, *GetNameSafe(GetPawn()), Request, Now - NPCDiagnosticAnchorTime,
+            *Position.ToString(), *GetPawn()->GetVelocity().ToString(), NPCDiagnosticRequest == Request,
+            *NPCDiagnosticGoal.ToString(), *Path->GetCurrentTargetLocation().ToString(), int32(CurrentBehaviorState),
+            int32(Path->GetStatus()), NavPath.IsValid() && NavPath->IsValid(), NavPath.IsValid() && NavPath->IsPartial(),
+            NPC && NPC->GetCharacterMovement() ? int32(NPC->GetCharacterMovement()->MovementMode) : -1);
+    }
+}
+
+void ADMJellyAIController::ClearNPCDiagnosticState()
+{
+    if (GetWorld())
+    {
+        GetWorldTimerManager().ClearTimer(NPCDiagnosticTimer);
+    }
+    NPCDiagnosticRequest = 0;
+    NPCDiagnosticSampleRequest = 0;
+    NPCDiagnosticGoal = FVector::ZeroVector;
+    NPCDiagnosticAnchorTime = -1.0;
+    NPCDiagnosticLastReport = -1.0;
+    NPCDiagnosticWindowStart = -1.0;
+    NPCDiagnosticEventCount = 0;
+    NPCDiagnosticSuppressed = 0;
+}
+
+void ADMJellyAIController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    ClearNPCDiagnosticState();
+    Super::EndPlay(EndPlayReason);
+}
+#endif

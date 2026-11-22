@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
@@ -20,6 +20,10 @@ public:
 
     FDMOnPreMatchTutorialCompleted& OnTutorialCompleted() { return TutorialCompletedDelegate; }
     void MarkWaitingForOtherPlayers();
+    /** 표시된 소유 클라이언트의 포커스 이벤트만 구독한다. */
+    void StartTutorialFocusTracking();
+    /** 제거 전에 지연 포커스와 홀드 입력을 취소한다. */
+    void StopTutorialFocusTracking();
     /** 필수 위젯 연결이 실제로 유효한지 확인한다. */
     bool HasRequiredBindings() const;
 
@@ -27,6 +31,7 @@ protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeDestruct() override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& MouseEvent) override;
+    virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent) override;
     virtual FReply NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent) override;
     virtual FReply NativeOnKeyUp(const FGeometry& Geometry, const FKeyEvent& KeyEvent) override;
 
@@ -61,9 +66,24 @@ private:
     void RefreshPage();
     void CompleteTutorial();
     void HandleSpaceSkipHoldComplete();
+    void CancelSpaceHold(const TCHAR* Reason);
+    bool IsFocusTrackingValid() const;
+    bool IsOwningWindowActive() const;
+    bool HasTutorialUserFocus() const;
+    void HandleSlateFocusChanging(const FFocusEvent& Event, const FWeakWidgetPath& OldPath,
+        const TSharedPtr<SWidget>& OldWidget, const FWidgetPath& NewPath, const TSharedPtr<SWidget>& NewWidget);
+    void HandleApplicationActivationChanged(bool bActive);
+    void QueueViewportFocusRestore(const TSharedPtr<SWidget>& Target);
+    void RestoreTutorialFocus();
 
     int32 PageIndex = 0;
     bool bCompleted = false;
     FTimerHandle SpaceSkipTimer;
+    FTimerHandle FocusRestoreTimer;
+    FDelegateHandle FocusChangingHandle;
+    FDelegateHandle ApplicationActivationHandle;
+    TWeakPtr<SWidget> PendingViewportFocus;
+    bool bFocusTrackingActive = false;
+    bool bSpaceHeld = false;
     FDMOnPreMatchTutorialCompleted TutorialCompletedDelegate;
 };

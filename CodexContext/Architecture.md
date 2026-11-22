@@ -1,6 +1,16 @@
 # Architecture — 클래스 구조 및 시스템 책임
 
-## P2 승인 동기화 — 2026-11-13
+## P3-9 최신 기준 — 2026-11-17
+
+기준 HEAD: `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. [최신 구현 대조와 검증 한계](ImplementationStatus.md#p3-9--최신-아키텍처-결정-및-구현-대조-2026-11-17)를 함께 읽는다. 아래 최신 절과 충돌하는 P2/기존 본문은 당시 설계·조사 이력으로 보존하며 현재 완료 근거로 사용하지 않는다.
+
+- **최신 결정:** `ADMJellyCharacterBase`를 공통 기반으로 `ADMPlayerCharacter`·`ADMNPCCharacter`를 유지한다. 기존 GameMode·GameState·PlayerState·PlayerController 및 Manager·Component 책임을 유지한다. 두 Character 헤더의 실제 상속도 확인했다.
+- **B안 통합 중단:** P3-7 Anonymous Presentation PoC를 본 프로젝트에 통합하지 않는다. 실험 브랜치·Worktree는 별도 보존하며 코드·에셋을 복사하지 않는다.
+- 정상 게임 화면의 플레이어/NPC 위장 일관성은 유지한다. 네트워크 메타데이터(클래스·소유 관계 등) 수준의 플레이어 정체 은폐는 필수 요구사항에서 제외한다. 이는 유물 운반 관계·개인 상태 등 비공개 게임 데이터의 전역 공개 허용이 아니다.
+- Server Authority / Single Source of Truth / Least Replication / Event Driven을 유지한다. P3-1 결과 표시·순위, P3-2 HUD, P3-3 시작 게이트, P3-4 로비 복구는 기존 책임 안의 변경이다.
+- 도착 제한 최신 C++ 기본값은 **90초**다. 아래 P2의 120초 및 구현 전 표현은 당시 기록이다.
+
+## P2 승인 동기화 — 2026-11-13 (당시 기록; 최신 기준은 상단 P3-9)
 
 이번 사용자 P2 요청의 명시 범위만 **설계 승인**으로 채택한다. 과거 승인으로 소급하지 않는다. 기준 HEAD는 `914173a`이며 구현 사실·설계 승인·에셋 적용·실행 검증은 별개다. 상세 근거와 미결정 사항은 [ImplementationStatus 10절](ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)을 따른다.
 

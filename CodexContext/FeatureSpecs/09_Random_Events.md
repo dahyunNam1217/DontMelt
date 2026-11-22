@@ -1,6 +1,15 @@
 # 09. 랜덤 이벤트 — 정전·패닉·입력 반전
 
-## P2 승인 동기화 — 2026-11-13
+## P3-9 최신 기준 — 2026-11-17
+
+기준 HEAD: `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. [최신 구현 대조와 검증 한계](../ImplementationStatus.md#p3-9--최신-아키텍처-결정-및-구현-대조-2026-11-17)를 함께 읽는다. 아래 최신 절과 충돌하는 P2/기존 본문은 당시 설계·조사 이력으로 보존하며 현재 완료 근거로 사용하지 않는다.
+
+- `Public/UI/DMRandomEventHUDWidget.h`는 `TXT_EventDescription`만 BindWidget 필수다. `TXT_EventName`·`PB_EventProgress`는 BindWidgetOptional 호환 필드이며 존재하면 Collapsed 처리한다.
+- `Private/UI/DMRandomEventHUDWidget.cpp::RefreshPresentation`은 설명·예고 접두사만 표시하며 이름/진행률 갱신을 제거했다. GameState 공개 이벤트와 DataAsset 설명을 사용하고 정의 누락 시 대체 문구를 표시한다.
+- 기존0.1초 로컬 Timer는 예고→진행 전환과 종료 숨김을 위해 유지한다. 비활성·만료·Destruct 시 정리 경로가 있다. 서버 이벤트 판정과 복제 계약을 변경한 작업이 아니다.
+- 설명만 있는 WBP 컴파일, 경고→진행→종료, 정의 누락, Host/Client·Travel 재생성은 미검증이다.
+
+## P2 승인 동기화 — 2026-11-13 (당시 기록; 최신 기준은 상단 P3-9)
 
 이번 사용자 P2 요청의 명시 범위만 **설계 승인**으로 채택한다. 과거 승인으로 소급하지 않는다. 기준 HEAD는 `914173a`이며 구현 사실·설계 승인·에셋 적용·실행 검증은 별개다. 상세 근거와 미결정 사항은 [ImplementationStatus 10절](../ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)을 따른다.
 
