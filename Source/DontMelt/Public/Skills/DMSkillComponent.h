@@ -162,6 +162,12 @@ public:
      */
     bool TryExecuteVisionDistort(ADMMatchPlayerState* TargetPlayerState);
 
+    /** SizeAmplification을 서버 권한으로 대상에게 적용한다. */
+    bool TryExecuteSizeAmplification(ADMMatchPlayerState* TargetPlayerState);
+
+    /** SlowMovement를 서버 권한으로 대상에게 적용한다. */
+    bool TryExecuteSlowMovement(ADMMatchPlayerState* TargetPlayerState);
+
 #pragma endregion
 
 #pragma region Lifecycle Cleanup
@@ -260,6 +266,12 @@ private:
      * VisionDistort:
      * Target의 Status.VisionDistorted를 검사한다.
      *
+     * SlowMovement:
+     * Target의 Status.SlowMovement를 검사한다.
+     *
+     * SizeAmplification:
+     * Target의 Status.SizeAmplified를 검사한다.
+     *
      * FootstepAmplify:
      * 현재 Caster SkillComponent가 동일 Target에
      * active context를 유지 중인지 검사한다.
@@ -321,6 +333,9 @@ private:
      * Server-only runtime context이며 Replicate하지 않는다.
      */
     TWeakObjectPtr<ADMMatchPlayerState> ActiveFootstepAmplifyTarget;
+
+    /** Server 기준 FootstepAmplify 시작 시각. 피해자 HUD에는 시전자 정보 없이 시각만 전달한다. */
+    double FootstepAmplifyStartServerTime = 0.0;
 
     /**
      * Server 기준 FootstepAmplify 종료 시각.

@@ -47,6 +47,9 @@ class DONTMELT_API ADMMatchGameState : public AGameStateBase
 public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    /** 권위 서버가 확정한 공개 월드 사운드를 현재 관련 클라이언트에 전달한다. */
+    void BroadcastWorldAudioEvent(EDMWorldAudioEvent EventType, const FVector& WorldLocation);
+
     UFUNCTION(BlueprintPure, Category = "DM|Match|State")
     FDMMatchPhaseState GetPhaseState() const
     {
@@ -188,6 +191,13 @@ public:
     }
 
 private:
+#pragma region Cosmetic Audio
+
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastWorldAudioEvent(EDMWorldAudioEvent EventType, FVector_NetQuantize WorldLocation);
+
+#pragma endregion
+
 #pragma region Server Mutators
 
     /** 서버에서 Phase를 확정한다. 이미 같은 값이면 변경 없이 true를 반환한다. */

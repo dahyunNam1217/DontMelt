@@ -2,6 +2,7 @@
 
 #include "Core/DMGameplayUtils.h"
 #include "Core/DMMatchConstants.h"
+#include "Core/DMGameInstance.h"
 
 #include "UI/DMPlayerResultRowWidget.h"
 
@@ -46,6 +47,11 @@ namespace
 void UDMMatchResultWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+
+    if (UDMGameInstance* GameInstance = Cast<UDMGameInstance>(GetGameInstance()))
+    {
+        GameInstance->BindCommonUIClickSound(this);
+    }
 
     if (IsValid(BTN_ReturnToLobby))
     {

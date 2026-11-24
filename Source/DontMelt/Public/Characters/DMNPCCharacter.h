@@ -8,6 +8,10 @@
 #include "Engine/DataTable.h"
 #include "DMNPCCharacter.generated.h"
 
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
+class UStaticMeshComponent;
+
 /**
  * NPC 젤리 인간 Character.
  *
@@ -22,6 +26,20 @@ class DONTMELT_API ADMNPCCharacter : public ADMJellyCharacterBase
 public:
     ADMNPCCharacter(const FObjectInitializer& ObjectInitializer);
 
+    /** 정전 전용 Material을 로컬 Mesh 슬롯에 적용한다. */
+    bool BeginBlackoutMaterialPresentation(
+        UMaterialInterface* BlackoutMaterial,
+        FName FadeParameterName,
+        float InitialFade,
+        const TArray<int32>& MaterialSlots
+    );
+
+    /** 이미 생성된 정전 MID의 Fade 값만 변경한다. */
+    void SetBlackoutMaterialFade(float FadeValue);
+
+    /** 정전 MID가 유지된 슬롯만 원래 Material로 복구한다. */
+    void EndBlackoutMaterialPresentation();
+
 #pragma region AI Configuration Query
 
     const FDataTableRowHandle& GetBehaviorProfileHandle() const
@@ -31,7 +49,10 @@ public:
 
 #pragma endregion
 
-    
+protected:
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+public:
 #pragma region NPC Alert Presentation
 
     /**
@@ -43,10 +64,41 @@ public:
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastPlayAlertEffect();
 
+    /** BP Timeline 완료 시 호출하여 느낌표를 다시 숨긴다. */
+    UFUNCTION(BlueprintCallable, Category = "DM|Presentation|Mistaken Attack")
+    void FinishMistakenAttackExclamationPresentation();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "DM|Presentation|Mistaken Attack")
+    void BP_PlayMistakenAttackExclamationPresentation();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "DM|Presentation|Mistaken Attack")
+    void BP_StopMistakenAttackExclamationPresentation();
+
 #pragma endregion
 
 
 private:
+    void StopMistakenAttackExclamationPresentation();
+
+    /** BP Viewport에서 Mesh·Socket·상대 Transform을 편집한다. */
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "DM|Presentation|Mistaken Attack",
+        meta = (AllowPrivateAccess = "true")
+    )
+    TObjectPtr<UStaticMeshComponent> MistakenAttackExclamation = nullptr;
+
+    /** 슬롯별 정전 시작 직전 Material. */
+    UPROPERTY(Transient)
+    TMap<int32, TObjectPtr<UMaterialInterface>> BlackoutOriginalMaterials;
+
+    /** Fade 값을 갱신할 슬롯별 정전 MID. */
+    UPROPERTY(Transient)
+    TMap<int32, TObjectPtr<UMaterialInstanceDynamic>> BlackoutDynamicMaterials;
+
+    FName ActiveBlackoutFadeParameterName = NAME_None;
+
 #pragma region AI Configuration Data
 
     /**

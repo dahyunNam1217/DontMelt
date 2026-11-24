@@ -3,6 +3,8 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 
 ADMRelic::ADMRelic()
 {
@@ -34,6 +36,27 @@ ADMRelic::ADMRelic()
     InteractionBounds->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
     InteractionBounds->SetGenerateOverlapEvents(false);
+
+    PublicRelicMarker = CreateDefaultSubobject<UNiagaraComponent>(TEXT("PublicRelicMarker"));
+    PublicRelicMarker->SetupAttachment(SceneRoot);
+    PublicRelicMarker->SetAutoActivate(false);
+    PublicRelicMarker->SetIsReplicated(false);
+}
+
+void ADMRelic::BeginPlay()
+{
+    Super::BeginPlay();
+    RefreshWorldPresentation();
+}
+
+void ADMRelic::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (IsValid(PublicRelicMarker))
+    {
+        PublicRelicMarker->DeactivateImmediate();
+    }
+
+    Super::EndPlay(EndPlayReason);
 }
 
 bool ADMRelic::IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const
@@ -114,6 +137,21 @@ void ADMRelic::RefreshWorldPresentation()
     const bool bVisible = ShouldBeVisibleInWorld();
 
     SetActorHiddenInGame(!bVisible);
+
+    if (IsValid(PublicRelicMarker))
+    {
+        if (bVisible && IsValid(PublicRelicMarker->GetAsset()))
+        {
+            if (!PublicRelicMarker->IsActive())
+            {
+                PublicRelicMarker->Activate(true);
+            }
+        }
+        else
+        {
+            PublicRelicMarker->DeactivateImmediate();
+        }
+    }
 
     /*
      * Server:

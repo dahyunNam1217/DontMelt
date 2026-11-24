@@ -2,6 +2,7 @@
 #include "UI/DMLobbyWidget.h"
 
 #include "Core/DMMatchConstants.h"
+#include "Core/DMGameInstance.h"
 
 #include "UI/DMLobbyPlayerRowWidget.h"
 #include "UI/DMSettingsWidget.h"
@@ -45,6 +46,11 @@ bool UDMLobbyWidget::IsGameStateBound() const
 void UDMLobbyWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
+
+    if (UDMGameInstance* GameInstance = Cast<UDMGameInstance>(GetGameInstance()))
+    {
+        GameInstance->BindCommonUIClickSound(this);
+    }
 
     if (IsValid(BTN_Ready.Get()))
     {
@@ -297,14 +303,18 @@ void UDMLobbyWidget::RefreshControls()
     {
         TXT_RuleSummary->SetText(
             MinPlayers > 0 && MaxPlayers > 0
-                ? FText::FromString(FString::Printf(TEXT("최소 %d명 / 최대 %d명"), MinPlayers, MaxPlayers))
-                : FText::FromString(TEXT("로비 규칙 동기화 중..."))
+                ? FText::Format(
+                    NSLOCTEXT("DMLobby", "PlayerRuleFormat", "최소 {0}명 / 최대 {1}명"),
+                    FText::AsNumber(MinPlayers), FText::AsNumber(MaxPlayers))
+                : NSLOCTEXT("DMLobby", "RulesSyncing", "로비 규칙 동기화 중...")
         );
     }
 
     if (IsValid(TXT_ReadyButton.Get()))
     {
-        TXT_ReadyButton->SetText(FText::FromString(bIsReady ? TEXT("준비 취소") : TEXT("준비")));
+        TXT_ReadyButton->SetText(
+            bIsReady ? NSLOCTEXT("DMLobby", "CancelReady", "준비 취소")
+                     : NSLOCTEXT("DMLobby", "Ready", "준비"));
     }
 
     if (IsValid(BTN_Ready.Get()))

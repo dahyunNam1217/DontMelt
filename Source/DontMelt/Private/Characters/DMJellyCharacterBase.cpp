@@ -8,6 +8,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
+#include "NiagaraComponent.h"
 
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -25,6 +26,10 @@ ADMJellyCharacterBase::ADMJellyCharacterBase(const FObjectInitializer& ObjectIni
     JellyPhysicsComponent = CreateDefaultSubobject<UDMJellyPhysicsComponent>(TEXT("JellyPhysicsComponent"));
 
     CharacterVFXComponent = CreateDefaultSubobject<UDMCharacterVFXComponent>(TEXT("CharacterVFXComponent"));
+
+    StunVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("StunVFXComponent"));
+    StunVFXComponent->SetupAttachment(GetMesh(), TEXT("FX_Stun_Head"));
+    StunVFXComponent->SetAutoActivate(false);
 
     bUseControllerRotationPitch = false;
     bUseControllerRotationYaw = false;

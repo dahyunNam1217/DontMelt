@@ -105,6 +105,11 @@ void UDMSkillBarWidget::RefreshDefinitions()
     ApplySlot(SkillSlot2, DMGameplayTags::Skill_FootstepAmplify, TEXT("2"));
 
     ApplySlot(SkillSlot3, DMGameplayTags::Skill_VisionDistort, TEXT("3"));
+
+    // 최종 단축키가 확정되지 않아 신규 슬롯의 Key Label은 비워 둔다.
+    ApplySlot(SkillSlot4, DMGameplayTags::Skill_SizeAmplification, TEXT(""));
+
+    ApplySlot(SkillSlot5, DMGameplayTags::Skill_SlowMovement, TEXT(""));
 }
 
 void UDMSkillBarWidget::RefreshCooldowns()
@@ -158,7 +163,11 @@ void UDMSkillBarWidget::RefreshCooldowns()
 
     const bool bSlot3Cooling = RefreshSlot(SkillSlot3, DMGameplayTags::Skill_VisionDistort);
 
-    if (!bSlot1Cooling && !bSlot2Cooling && !bSlot3Cooling)
+    const bool bSlot4Cooling = RefreshSlot(SkillSlot4, DMGameplayTags::Skill_SizeAmplification);
+
+    const bool bSlot5Cooling = RefreshSlot(SkillSlot5, DMGameplayTags::Skill_SlowMovement);
+
+    if (!bSlot1Cooling && !bSlot2Cooling && !bSlot3Cooling && !bSlot4Cooling && !bSlot5Cooling)
     {
         StopDisplayTimer();
         return;

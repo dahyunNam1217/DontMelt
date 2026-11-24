@@ -31,7 +31,7 @@ namespace
         TWeakObjectPtr<UPathFollowingComponent> Path;
         FDelegateHandle CompletionHandle;
     };
-    bool bEnabled = false;
+    bool bDiagnosticsEnabled = false;
     FString OutputPath;
     FString Pending;
     TMap<TWeakObjectPtr<UWorld>, FTimerHandle> Timers;
@@ -72,7 +72,7 @@ namespace
     }
     void Row(const TCHAR* Type, ADMNPCCharacter* NPC, float Delta, const FString& Detail)
     {
-        if (!bEnabled || !IsValid(NPC) || !IsTestWorld(NPC->GetWorld())) return;
+        if (!bDiagnosticsEnabled || !IsValid(NPC) || !IsTestWorld(NPC->GetWorld())) return;
         UWorld* World = NPC->GetWorld();
         Pending += FString::Printf(TEXT("%s\t%llu\t%s\t%s\t%d\t%.4f\t%.5f\t%.5f\t%s\t%s\t%s\n"),
             Type, GFrameCounter, *World->GetName(), *NPC->GetName(), static_cast<int32>(NPC->GetLocalRole()),
@@ -82,7 +82,7 @@ namespace
     void Sample(TWeakObjectPtr<UWorld> WeakWorld)
     {
         UWorld* World = WeakWorld.Get();
-        if (!bEnabled || !IsTestWorld(World)) return;
+        if (!bDiagnosticsEnabled || !IsTestWorld(World)) return;
         for (TActorIterator<ADMNPCCharacter> It(World); It; ++It)
         {
             ADMNPCCharacter* NPC = *It;
@@ -129,7 +129,7 @@ namespace
     }
     void AttachWorld(UWorld* World)
     {
-        if (!bEnabled || !IsTestWorld(World) || Timers.Contains(World)) return;
+        if (!bDiagnosticsEnabled || !IsTestWorld(World) || Timers.Contains(World)) return;
         const TWeakObjectPtr<UWorld> WeakWorld = World;
         FTimerHandle Timer;
         World->GetTimerManager().SetTimer(Timer, FTimerDelegate::CreateLambda([WeakWorld]() { Sample(WeakWorld); }), 1.f, true);
@@ -152,7 +152,7 @@ namespace
     }
     void Stop()
     {
-        bEnabled = false;
+        bDiagnosticsEnabled = false;
         TArray<TWeakObjectPtr<UWorld>> Worlds;
         Timers.GenerateKeyArray(Worlds);
         for (auto World : Worlds) if (World.IsValid()) DetachWorld(World.Get());
@@ -173,7 +173,7 @@ namespace
         IFileManager::Get().MakeDirectory(*Directory, true);
         OutputPath = FPaths::Combine(Directory, FString::Printf(TEXT("NPCDiag_%s_%s.tsv"), *Tag, *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"))));
         Pending = TEXT("Type\tFrame\tWorld\tNPC\tRole\tWorldTime\tWorldDt\tMoveDt\tLocation\tVelocity\tDetail\n");
-        bEnabled = true;
+        bDiagnosticsEnabled = true;
         InitHandle = FWorldDelegates::OnPostWorldInitialization.AddLambda([](UWorld* W, const UWorld::InitializationValues) { AttachWorld(W); });
         CleanupHandle = FWorldDelegates::OnWorldCleanup.AddLambda([](UWorld* W, bool, bool)
         {
@@ -192,7 +192,7 @@ namespace DMNPCMovementDiagnostics
 {
     void RecordMovement(UCharacterMovementComponent* Movement, float DeltaSeconds)
     {
-        if (!bEnabled) return;
+        if (!bDiagnosticsEnabled) return;
         ADMNPCCharacter* NPC = Movement ? Cast<ADMNPCCharacter>(Movement->GetOwner()) : nullptr;
         if (!NPC || !IsTestWorld(NPC->GetWorld())) return;
         AttachWorld(NPC->GetWorld());
@@ -204,7 +204,7 @@ namespace DMNPCMovementDiagnostics
     }
     void RecordStuck(UCharacterMovementComponent* Movement, const FHitResult* Hit)
     {
-        if (!bEnabled) return;
+        if (!bDiagnosticsEnabled) return;
         ADMNPCCharacter* NPC = Movement ? Cast<ADMNPCCharacter>(Movement->GetOwner()) : nullptr;
         if (!NPC || !IsTestWorld(NPC->GetWorld())) return;
         Row(TEXT("Stuck"), NPC, 0, FString::Printf(TEXT("Actor=%s Component=%s Depth=%.3f Mode=%s"),

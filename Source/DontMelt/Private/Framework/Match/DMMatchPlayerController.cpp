@@ -53,6 +53,8 @@
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
 #include "EngineUtils.h"
+#include "Sound/SoundBase.h"
+#include "Sound/SoundAttenuation.h"
 #include "TimerManager.h"
 #include "GameFramework/GameStateBase.h"
 
@@ -237,6 +239,7 @@ void ADMMatchPlayerController::BeginPlay()
 
 void ADMMatchPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    ClearMatchAudioTimers();
     ClosePreMatchTutorial();
     ClearPendingRespawnHandoff();
     UnbindRespawnLifeStateChanges();
@@ -255,6 +258,7 @@ void ADMMatchPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 
     bIngameMenuOpen = false;
+    bControlsHelpHeld = false;
 
     if (IsLocalController())
     {
@@ -540,6 +544,7 @@ void ADMMatchPlayerController::BindOwnChestMarkerSources()
         if (ADMMatchGameState* PreviousGameState = ObservedOwnChestGameState.Get())
         {
             PreviousGameState->OnPhaseStateChanged().RemoveAll(this);
+            PreviousGameState->OnRandomEventPublicStateChanged().RemoveAll(this);
         }
 
         ObservedOwnChestGameState = CurrentGameState;
@@ -548,6 +553,12 @@ void ADMMatchPlayerController::BindOwnChestMarkerSources()
         {
             CurrentGameState->OnPhaseStateChanged().AddUObject(
                 this, &ThisClass::HandleOwnChestPhaseChanged
+            );
+            CurrentGameState->OnRandomEventPublicStateChanged().AddUObject(
+                this, &ThisClass::HandleRandomEventAudioStateChanged
+            );
+            HandleRandomEventAudioStateChanged(
+                CurrentGameState, CurrentGameState->GetRandomEventPublicState()
             );
         }
     }
@@ -563,6 +574,7 @@ void ADMMatchPlayerController::UnbindOwnChestMarkerSources()
     if (ADMMatchGameState* PreviousGameState = ObservedOwnChestGameState.Get())
     {
         PreviousGameState->OnPhaseStateChanged().RemoveAll(this);
+        PreviousGameState->OnRandomEventPublicStateChanged().RemoveAll(this);
     }
 
     ObservedOwnChestPlayerState.Reset();
@@ -832,6 +844,34 @@ void ADMMatchPlayerController::InputMenuStarted()
     OpenIngameMenu();
 }
 
+void ADMMatchPlayerController::InputShowControlsStarted()
+{
+    if (!IsLocalController())
+    {
+        return;
+    }
+
+    bControlsHelpHeld = true;
+    if (IsValid(GameRootWidget))
+    {
+        GameRootWidget->RefreshIngameMenuPresentation();
+    }
+}
+
+void ADMMatchPlayerController::InputShowControlsStopped()
+{
+    if (!bControlsHelpHeld)
+    {
+        return;
+    }
+
+    bControlsHelpHeld = false;
+    if (IsValid(GameRootWidget))
+    {
+        GameRootWidget->RefreshIngameMenuPresentation();
+    }
+}
+
 void ADMMatchPlayerController::OpenIngameMenu()
 {
     if (!IsLocalController() || bIngameMenuOpen || !IsValid(GameRootWidget.Get()))
@@ -869,6 +909,8 @@ void ADMMatchPlayerController::OpenIngameMenu()
         return;
     }
 
+    // UIOnly 전환 중 KeyUp이 누락되어 상세 패널이 남지 않게 한다.
+    bControlsHelpHeld = false;
     bIngameMenuOpen = true;
 
     MenuWidget->OpenMenu();
@@ -1550,7 +1592,13 @@ void ADMMatchPlayerController::ClientNotifyRelicStolen_Implementation()
         return;
     }
 
+    PlayLocal2DSound(RelicStolenWarningSound.Get());
     RelicStolenNotificationDelegate.Broadcast();
+}
+
+void ADMMatchPlayerController::ClientPlayRelicDepositSound_Implementation()
+{
+    PlayLocal2DSound(RelicDepositSound.Get());
 }
 
 #pragma endregion
@@ -1801,6 +1849,176 @@ void ADMMatchPlayerController::NotifyMatchResultCached(const FGuid& ResultId)
     ServerAcknowledgeMatchResult(ResultId);
 }
 
+void ADMMatchPlayerController::RefreshMatchPhaseAudio(const FDMMatchPhaseState& NewPhaseState)
+{
+    if (!IsLocalController())
+    {
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    const ADMMatchGameState* GameState = IsValid(World) ? World->GetGameState<ADMMatchGameState>() : nullptr;
+
+    if (!IsValid(World) || !IsValid(GameState))
+    {
+        return;
+    }
+
+    const double ServerNow = GameState->GetServerWorldTimeSeconds();
+    const double Remaining = FMath::Max(0.0, NewPhaseState.PhaseEndServerTime - ServerNow);
+
+    if (NewPhaseState.CurrentPhase == EDMMatchPhase::Countdown
+        && NewPhaseState.PhaseEndServerTime > 0.0)
+    {
+        if (FMath::IsNearlyEqual(LastScheduledCountdownEndServerTime, NewPhaseState.PhaseEndServerTime))
+        {
+            return;
+        }
+
+        ClearMatchAudioTimers();
+        LastScheduledCountdownEndServerTime = NewPhaseState.PhaseEndServerTime;
+
+        const int32 Steps[3] = {3, 2, 1};
+        for (int32 Index = 0; Index < 3; ++Index)
+        {
+            const double Delay = Remaining - static_cast<double>(Steps[Index]);
+            if (Delay <= 0.0)
+            {
+                continue;
+            }
+
+            FTimerDelegate Delegate = FTimerDelegate::CreateWeakLambda(this, [this]()
+            {
+                PlayCountdownTickAudio();
+            });
+            World->GetTimerManager().SetTimer(
+                CountdownAudioTimerHandles[Index], Delegate, static_cast<float>(Delay), false
+            );
+        }
+        return;
+    }
+
+    if (NewPhaseState.CurrentPhase == EDMMatchPhase::Playing
+        || NewPhaseState.CurrentPhase == EDMMatchPhase::Overtime)
+    {
+        if (LastScheduledCountdownEndServerTime > 0.0)
+        {
+            PlayCountdownFinishAudio();
+            LastScheduledCountdownEndServerTime = 0.0;
+        }
+
+        const bool bNewTimedPhase = NewPhaseState.PhaseEndServerTime > 0.0
+            && (LastScheduledMatchEndPhase != NewPhaseState.CurrentPhase
+                || !FMath::IsNearlyEqual(LastScheduledMatchEndServerTime, NewPhaseState.PhaseEndServerTime));
+        if (bNewTimedPhase)
+        {
+            for (FTimerHandle& Handle : MatchEndCountdownAudioTimerHandles)
+            {
+                World->GetTimerManager().ClearTimer(Handle);
+            }
+            World->GetTimerManager().ClearTimer(MatchEndWarningAudioTimerHandle);
+
+            LastScheduledMatchEndPhase = NewPhaseState.CurrentPhase;
+            LastScheduledMatchEndServerTime = NewPhaseState.PhaseEndServerTime;
+            if (NewPhaseState.CurrentPhase == EDMMatchPhase::Playing && Remaining > 30.0)
+            {
+                FTimerDelegate WarningDelegate = FTimerDelegate::CreateWeakLambda(this, [this]()
+                {
+                    PlayMatchEndWarningAudio();
+                });
+                World->GetTimerManager().SetTimer(
+                    MatchEndWarningAudioTimerHandle, WarningDelegate, static_cast<float>(Remaining - 30.0), false
+                );
+            }
+
+            for (int32 Step = 5; Step >= 1; --Step)
+            {
+                const double Delay = Remaining - static_cast<double>(Step);
+                if (Delay <= 0.0)
+                {
+                    continue;
+                }
+
+                FTimerDelegate StepDelegate = FTimerDelegate::CreateWeakLambda(this, [this]()
+                {
+                    PlayCountdownTickAudio();
+                });
+                World->GetTimerManager().SetTimer(
+                    MatchEndCountdownAudioTimerHandles[5 - Step], StepDelegate, static_cast<float>(Delay), false
+                );
+            }
+        }
+        return;
+    }
+
+    const bool bConfirmedTimedMatchFinish = NewPhaseState.CurrentPhase == EDMMatchPhase::Finished
+        && (LastScheduledMatchEndPhase == EDMMatchPhase::Playing
+            || LastScheduledMatchEndPhase == EDMMatchPhase::Overtime)
+        && LastScheduledMatchEndServerTime > 0.0;
+
+    ClearMatchAudioTimers();
+
+    if (bConfirmedTimedMatchFinish)
+    {
+        PlayCountdownFinishAudio();
+    }
+}
+
+void ADMMatchPlayerController::RefreshMatchResultAudio(const FDMMatchResult& MatchResult)
+{
+    if (!IsLocalController() || !MatchResult.ResultId.IsValid()
+        || LastPlayedMatchResultAudioId == MatchResult.ResultId)
+    {
+        return;
+    }
+
+    LastPlayedMatchResultAudioId = MatchResult.ResultId;
+
+    const ADMMatchPlayerState* MatchPlayerState = GetPlayerState<ADMMatchPlayerState>();
+    if (!IsValid(MatchPlayerState) || MatchResult.WinningBaseSlot == INDEX_NONE)
+    {
+        return;
+    }
+
+    PlayLocal2DSound(
+        MatchPlayerState->GetBaseSlot() == MatchResult.WinningBaseSlot ? VictorySound.Get() : DefeatSound.Get()
+    );
+}
+
+void ADMMatchPlayerController::PlayCountdownTickAudio()
+{
+    PlayLocal2DSound(CountdownTickSound.Get());
+}
+
+void ADMMatchPlayerController::PlayCountdownFinishAudio()
+{
+    PlayLocal2DSound(CountdownFinishSound.Get());
+}
+
+void ADMMatchPlayerController::PlayMatchEndWarningAudio()
+{
+    PlayLocal2DSound(MatchEndThirtySecondWarningSound.Get());
+}
+
+void ADMMatchPlayerController::ClearMatchAudioTimers()
+{
+    if (UWorld* World = GetWorld())
+    {
+        for (FTimerHandle& Handle : CountdownAudioTimerHandles)
+        {
+            World->GetTimerManager().ClearTimer(Handle);
+        }
+        World->GetTimerManager().ClearTimer(MatchEndWarningAudioTimerHandle);
+        for (FTimerHandle& Handle : MatchEndCountdownAudioTimerHandles)
+        {
+            World->GetTimerManager().ClearTimer(Handle);
+        }
+    }
+    LastScheduledCountdownEndServerTime = 0.0;
+    LastScheduledMatchEndServerTime = 0.0;
+    LastScheduledMatchEndPhase = EDMMatchPhase::Waiting;
+}
+
 void ADMMatchPlayerController::ServerAcknowledgeMatchResult_Implementation(FGuid ResultId)
 {
     UWorld* World = GetWorld();
@@ -1959,6 +2177,26 @@ void ADMMatchPlayerController::InputSkillVisionDistortStarted()
     ServerRequestBeginSkillTargeting(DMGameplayTags::Skill_VisionDistort);
 }
 
+void ADMMatchPlayerController::InputSkillSlowMovementStarted()
+{
+    if (!IsLocalController())
+    {
+        return;
+    }
+
+    ServerRequestBeginSkillTargeting(DMGameplayTags::Skill_SlowMovement);
+}
+
+void ADMMatchPlayerController::InputSkillSizeAmplificationStarted()
+{
+    if (!IsLocalController())
+    {
+        return;
+    }
+
+    ServerRequestBeginSkillTargeting(DMGameplayTags::Skill_SizeAmplification);
+}
+
 void ADMMatchPlayerController::InputTargetRandomStarted()
 {
     CommitPendingTargetSkill(EDMSkillTargetMode::RandomEligible);
@@ -2091,6 +2329,23 @@ void ADMMatchPlayerController::ServerRequestBeginSkillTargeting_Implementation(c
         return;
     }
 
+    /*
+     * DataAsset에 정의만 추가된 미구현 스킬이
+     * Targeting Mode까지 진입하지 않도록 서버에서 차단한다.
+     */
+    if (SkillTag != DMGameplayTags::Skill_FootstepAmplify && SkillTag != DMGameplayTags::Skill_VisionDistort
+        && SkillTag != DMGameplayTags::Skill_SizeAmplification && SkillTag != DMGameplayTags::Skill_SlowMovement)
+    {
+        UE_LOG(
+            LogDMMatchPlayerController,
+            Warning,
+            TEXT("Skill targeting request rejected. Unsupported Skill=%s"),
+            *SkillTag.ToString()
+        );
+
+        return;
+    }
+
     const FDMActionAvailabilityResult Availability = SkillComponent->GetSkillAvailability(SkillTag);
 
     if (!Availability.bAllowed)
@@ -2121,6 +2376,8 @@ void ADMMatchPlayerController::ClientBeginSkillTargeting_Implementation(const FG
     {
         return;
     }
+
+    InputShowControlsStopped();
 
     ADMPlayerCharacter* PlayerCharacter = Cast<ADMPlayerCharacter>(GetPawn());
 
@@ -2186,6 +2443,23 @@ void ADMMatchPlayerController::ServerRequestTargetedSkill_Implementation(
      */
     if (Definition == nullptr || !Definition->bRequiresTargetSelection)
     {
+        return;
+    }
+
+    /*
+     * 승인된 Target Skill 실행 경로가 없는 Tag는
+     * 대상 탐색과 Presentation 처리 전에 거부한다.
+     */
+    if (SkillTag != DMGameplayTags::Skill_FootstepAmplify && SkillTag != DMGameplayTags::Skill_VisionDistort
+        && SkillTag != DMGameplayTags::Skill_SizeAmplification && SkillTag != DMGameplayTags::Skill_SlowMovement)
+    {
+        UE_LOG(
+            LogDMMatchPlayerController,
+            Warning,
+            TEXT("Targeted Skill request rejected. Unsupported Skill=%s"),
+            *SkillTag.ToString()
+        );
+
         return;
     }
 
@@ -2260,19 +2534,41 @@ void ADMMatchPlayerController::ServerRequestTargetedSkill_Implementation(
         return;
     }
 
-    /*
-     * 알 수 없는 Target Skill에 대한 방어적 fallback.
-     *
-     * 따라서 여기서 cooldown을 소비하지 않는다.
-     */
-    UE_LOG(
-        LogDMMatchPlayerController,
-        Log,
-        TEXT("Targeted Skill validated. Skill=%s, Mode=%s, Target=%s. Execution is deferred."),
-        *SkillTag.ToString(),
-        *UEnum::GetValueAsString(TargetMode),
-        *GetNameSafe(TargetPlayerState)
-    );
+    if (SkillTag == DMGameplayTags::Skill_SlowMovement)
+    {
+        if (!SkillComponent->TryExecuteSlowMovement(TargetPlayerState))
+        {
+            UE_LOG(LogDMMatchPlayerController, Log, TEXT("Slow Movement execution rejected."));
+            return;
+        }
+
+        UE_LOG(
+            LogDMMatchPlayerController,
+            Log,
+            TEXT("Slow Movement executed successfully. Mode=%s"),
+            *UEnum::GetValueAsString(TargetMode)
+        );
+
+        return;
+    }
+
+    if (SkillTag == DMGameplayTags::Skill_SizeAmplification)
+    {
+        if (!SkillComponent->TryExecuteSizeAmplification(TargetPlayerState))
+        {
+            UE_LOG(LogDMMatchPlayerController, Log, TEXT("Size Amplification execution rejected."));
+            return;
+        }
+
+        UE_LOG(
+            LogDMMatchPlayerController,
+            Log,
+            TEXT("Size Amplification executed successfully. Mode=%s"),
+            *UEnum::GetValueAsString(TargetMode)
+        );
+        return;
+    }
+
 }
 
 void ADMMatchPlayerController::ClientSetFootstepAmplifyPresentation_Implementation(
@@ -2389,7 +2685,9 @@ void ADMMatchPlayerController::ClearLocalFootstepAmplifyPresentation()
     LocalFootstepAmplifyTarget.Reset();
 }
 
-void ADMMatchPlayerController::ClientNotifyFootstepAmplifyWarning_Implementation(const double EffectEndServerTime)
+void ADMMatchPlayerController::ClientNotifyFootstepAmplifyWarning_Implementation(
+    const double EffectStartServerTime, const double EffectEndServerTime
+)
 {
     if (!IsLocalController())
     {
@@ -2397,14 +2695,25 @@ void ADMMatchPlayerController::ClientNotifyFootstepAmplifyWarning_Implementation
     }
 
     // 피해자에게 공격자 정보 없이 종료 시각만 전달한다.
-    FootstepAmplifyWarningDelegate.Broadcast(EffectEndServerTime);
+    FootstepAmplifyWarningDelegate.Broadcast(EffectStartServerTime, EffectEndServerTime);
 
     UE_LOG(
         LogDMMatchPlayerController,
         Log,
-        TEXT("Footstep Amplify warning received. EndServerTime=%.3f"),
+        TEXT("Footstep Amplify warning received. StartServerTime=%.3f, EndServerTime=%.3f"),
+        EffectStartServerTime,
         EffectEndServerTime
     );
+}
+
+void ADMMatchPlayerController::ClientPlayTargetedSkillHitSound_Implementation(const FGameplayTag SkillTag)
+{
+    if (!IsLocalController() || !SkillTag.IsValid())
+    {
+        return;
+    }
+
+    PlayLocal2DSound(TargetedSkillHitSound.Get());
 }
 
 void ADMMatchPlayerController::ClientBeginVisionDistortPresentation_Implementation(
@@ -2505,6 +2814,8 @@ void ADMMatchPlayerController::ClientBeginVisionDistortPresentation_Implementati
 
     bIsLocalVisionDistortPresentationActive = true;
 
+    LocalVisionDistortStartServerTime = EffectStartServerTime;
+
     LocalVisionDistortEndServerTime = EffectStartServerTime + static_cast<double>(TotalDuration);
 
     VisionDistortPresentationChangedDelegate.Broadcast(true);
@@ -2550,6 +2861,8 @@ void ADMMatchPlayerController::ClearLocalVisionDistortPresentation()
     LocalVisionDistortMID = nullptr;
 
     bIsLocalVisionDistortPresentationActive = false;
+
+    LocalVisionDistortStartServerTime = 0.0;
 
     LocalVisionDistortEndServerTime = 0.0;
 
@@ -2615,6 +2928,22 @@ void ADMMatchPlayerController::ClientCleanupAllSkillPresentationForMatchEnd_Impl
 
 #pragma region Chest Interaction
 
+void ADMMatchPlayerController::OpenChestInteractionFromServer(
+    ADMRelicChest* Chest, const int32 BaseSlot, const int32 RegisteredRelicCount)
+{
+    if (!HasAuthority() || !IsValid(Chest))
+    {
+        return;
+    }
+
+    ServerOpenedChestForAudio = Chest;
+    if (ADMMatchGameState* MatchGameState = GetWorld() ? GetWorld()->GetGameState<ADMMatchGameState>() : nullptr)
+    {
+        MatchGameState->BroadcastWorldAudioEvent(EDMWorldAudioEvent::ChestOpen, Chest->GetActorLocation());
+    }
+    ClientOpenChestInteraction(Chest, BaseSlot, RegisteredRelicCount);
+}
+
 void ADMMatchPlayerController::ClientOpenChestInteraction_Implementation(
     ADMRelicChest* Chest, int32 BaseSlot, int32 RegisteredRelicCount
 )
@@ -2623,6 +2952,8 @@ void ADMMatchPlayerController::ClientOpenChestInteraction_Implementation(
     {
         return;
     }
+
+    InputShowControlsStopped();
 
     if (!IsValid(Chest))
     {
@@ -2666,6 +2997,11 @@ void ADMMatchPlayerController::CloseChestInteractionLocal()
         return;
     }
 
+    if (ADMRelicChest* Chest = OpenedChest.Get())
+    {
+        ServerCloseChestInteraction(Chest);
+    }
+
     UE_LOG(
         LogDMMatchPlayerController,
         Log,
@@ -2681,6 +3017,111 @@ void ADMMatchPlayerController::CloseChestInteractionLocal()
     InspectedRegisteredRelicCount = 0;
 
     ChestInteractionChangedDelegate.Broadcast(false, INDEX_NONE, 0);
+}
+
+void ADMMatchPlayerController::ServerCloseChestInteraction_Implementation(ADMRelicChest* Chest)
+{
+    if (!IsValid(Chest) || ServerOpenedChestForAudio.Get() != Chest)
+    {
+        return;
+    }
+
+    ServerOpenedChestForAudio.Reset();
+    if (ADMMatchGameState* MatchGameState = GetWorld() ? GetWorld()->GetGameState<ADMMatchGameState>() : nullptr)
+    {
+        MatchGameState->BroadcastWorldAudioEvent(EDMWorldAudioEvent::ChestClose, Chest->GetActorLocation());
+    }
+}
+
+void ADMMatchPlayerController::PlayWorldAudioEvent(
+    const EDMWorldAudioEvent EventType, const FVector& WorldLocation)
+{
+    USoundBase* Sound = nullptr;
+    switch (EventType)
+    {
+    case EDMWorldAudioEvent::ChestOpen: Sound = ChestOpenSound.Get(); break;
+    case EDMWorldAudioEvent::ChestClose: Sound = ChestCloseSound.Get(); break;
+    case EDMWorldAudioEvent::RelicPickup: Sound = RelicPickupSound.Get(); break;
+    case EDMWorldAudioEvent::RelicDrop: Sound = RelicDropSound.Get(); break;
+    default: return;
+    }
+    PlayLocalWorldSound(Sound, WorldLocation);
+}
+
+void ADMMatchPlayerController::HandleRandomEventAudioStateChanged(
+    ADMMatchGameState* Source, const FDMRandomEventRuntimeState NewState)
+{
+    if (!IsLocalController() || Source != ObservedOwnChestGameState.Get() || !NewState.IsScheduledOrActive()
+        || !NewState.EventTag.IsValid() || NewState.StartServerTime <= 0.0
+        || Source->GetServerWorldTimeSeconds() >= NewState.StartServerTime)
+    {
+        return;
+    }
+
+    if (LastRandomEventWarningTag == NewState.EventTag
+        && FMath::IsNearlyEqual(LastRandomEventWarningStartServerTime, NewState.StartServerTime, 0.01))
+    {
+        return;
+    }
+
+    LastRandomEventWarningTag = NewState.EventTag;
+    LastRandomEventWarningStartServerTime = NewState.StartServerTime;
+    PlayLocal2DSound(RandomEventWarningSound.Get());
+}
+
+void ADMMatchPlayerController::PlayLocal2DSound(USoundBase* Sound) const
+{
+    if (!IsLocalController() || !IsValid(Sound) || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    UGameplayStatics::PlaySound2D(this, Sound);
+}
+
+void ADMMatchPlayerController::PlayLocalWorldSound(USoundBase* Sound, const FVector& Location) const
+{
+    if (!IsLocalController() || !IsValid(Sound) || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    UGameplayStatics::PlaySoundAtLocation(
+        this, Sound, Location, FRotator::ZeroRotator, 1.0f, 1.0f, 0.0f, GameplayWorldAttenuation.Get()
+    );
+}
+
+void ADMMatchPlayerController::NotifyQuestStartedAudio(const int32 RunId)
+{
+    if (RunId <= 0 || LastQuestStartedAudioRunId == RunId)
+    {
+        return;
+    }
+
+    LastQuestStartedAudioRunId = RunId;
+    PlayLocal2DSound(QuestStartedSound.Get());
+}
+
+void ADMMatchPlayerController::NotifyQuestDeadlineWarningAudio(const int32 RunId)
+{
+    if (RunId <= 0 || LastQuestDeadlineWarningAudioRunId == RunId)
+    {
+        return;
+    }
+
+    LastQuestDeadlineWarningAudioRunId = RunId;
+    PlayLocal2DSound(QuestDeadlineWarningSound.Get());
+}
+
+void ADMMatchPlayerController::NotifyQuestCompletedAudio(const int32 RunId)
+{
+    if (RunId <= 0 || LastQuestCompletedAudioRunId == RunId)
+    {
+        return;
+    }
+
+    LastQuestCompletedAudioRunId = RunId;
+    PlayLocal2DSound(QuestCompletedSound.Get());
 }
 
 #pragma endregion

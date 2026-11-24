@@ -14,11 +14,19 @@ namespace DMGameplayTags
 
     UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_VisionDistorted);
 
+    UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_SizeAmplified);
+
+    UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_SlowMovement);
+
     UE_DECLARE_GAMEPLAY_TAG_EXTERN(Skill_Invisibility);
 
     UE_DECLARE_GAMEPLAY_TAG_EXTERN(Skill_FootstepAmplify);
 
     UE_DECLARE_GAMEPLAY_TAG_EXTERN(Skill_VisionDistort);
+
+    UE_DECLARE_GAMEPLAY_TAG_EXTERN(Skill_SizeAmplification);
+
+    UE_DECLARE_GAMEPLAY_TAG_EXTERN(Skill_SlowMovement);
 
     UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_JumpCount);
 

@@ -4,6 +4,8 @@
 #include "UI/DMCombatHUDWidget.h"
 #include "UI/DMSkillBarWidget.h"
 #include "UI/DMRelicHUDWidget.h"
+#include "UI/DMMinimapWidget.h"
+#include "UI/DMControlsHelpWidget.h"
 
 #include "Characters/DMPlayerCharacter.h"
 #include "Framework/Match/DMMatchGameState.h"
@@ -66,6 +68,30 @@ void UDMGameplayHUDWidget::SetRelicHUDSources(ADMMatchPlayerController* InContro
     // 기존 유물 HUD가 가진 초기 상태 갱신과
     // Delegate 연결·해제 로직을 그대로 재사용한다.
     RelicHUD->InitializeRelicHUD(InController, InCharacter);
+}
+
+void UDMGameplayHUDWidget::SetAuxiliaryHUDSources(
+    ADMMatchPlayerState* InPlayerState, ADMPlayerCharacter* InCharacter
+)
+{
+    if (IsValid(Minimap))
+    {
+        Minimap->SetDataSources(InPlayerState, InCharacter);
+    }
+}
+
+void UDMGameplayHUDWidget::SetAuxiliaryPresentation(
+    const bool bShowMinimap, const bool bShowControls, const bool bShowDetailedControls
+)
+{
+    if (IsValid(Minimap))
+    {
+        Minimap->SetPresentationActive(bShowMinimap);
+    }
+    if (IsValid(ControlsHelp))
+    {
+        ControlsHelp->SetPresentationState(bShowControls, bShowDetailedControls);
+    }
 }
 
 void UDMGameplayHUDWidget::SetPresentationActive(const bool bActive)
@@ -259,6 +285,9 @@ void UDMGameplayHUDWidget::NativeDestruct()
 
     // GameplayHUD가 제거되면 기존 유물 HUD 연결도 정리한다.
     SetRelicHUDSources(nullptr, nullptr);
+
+    SetAuxiliaryPresentation(false, false, false);
+    SetAuxiliaryHUDSources(nullptr, nullptr);
 
     BoundGameState.Reset();
 

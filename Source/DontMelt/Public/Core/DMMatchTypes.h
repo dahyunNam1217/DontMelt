@@ -22,6 +22,16 @@ enum class EDMMatchPhase : uint8
     Aborted UMETA(DisplayName = "Aborted")
 };
 
+/** 서버에서 확정된 공개 월드 사운드 사건. 식별 정보는 전송하지 않는다. */
+UENUM()
+enum class EDMWorldAudioEvent : uint8
+{
+    ChestOpen,
+    ChestClose,
+    RelicPickup,
+    RelicDrop
+};
+
 /**
  * 플레이어의 매치 생명주기 상태.
  *

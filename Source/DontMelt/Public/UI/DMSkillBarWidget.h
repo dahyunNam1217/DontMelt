@@ -13,7 +13,7 @@ class UDMSkillComponent;
 class UDMSkillSlotWidget;
 
 /**
- * 세 개의 스킬 슬롯을 관리하는 HUD.
+ * 최대 다섯 개의 스킬 슬롯을 관리하는 HUD.
  *
  * PlayerState와 SkillComponent의 기존 알림을 구독한다.
  * 쿨다운 원본은 복사하지 않고 조회한다.
@@ -45,6 +45,13 @@ protected:
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UDMSkillSlotWidget> SkillSlot3 = nullptr;
+
+    /** 신규 WBP 연결 전에도 기존 3슬롯 에셋이 로드되도록 선택 바인딩한다. */
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UDMSkillSlotWidget> SkillSlot4 = nullptr;
+
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UDMSkillSlotWidget> SkillSlot5 = nullptr;
 
 #pragma endregion
 

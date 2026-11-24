@@ -21,6 +21,11 @@ void UDMMainMenuWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
+    if (UDMGameInstance* GameInstance = Cast<UDMGameInstance>(GetGameInstance()))
+    {
+        GameInstance->BindCommonUIClickSound(this);
+    }
+
     if (!IsValid(TitlePanel.Get()) || !IsValid(MainMenuPanel.Get()) || !IsValid(JoinPanel.Get())
         || !IsValid(BTN_TitleStart.Get()) || !IsValid(BTN_TitleQuit.Get()) || !IsValid(BTN_CreateLobby.Get())
         || !IsValid(BTN_OpenJoin.Get()) || !IsValid(BTN_Quit.Get()) || !IsValid(BTN_BackToTitle.Get())
@@ -121,7 +126,7 @@ void UDMMainMenuWidget::HandleOpenJoinClicked()
 
     if (!IsValid(Controller))
     {
-        SetJoinError(FText::FromString(TEXT("메뉴 컨트롤러를 찾을 수 없습니다.")));
+        SetJoinError(NSLOCTEXT("DMMainMenu", "ControllerMissing", "메뉴 컨트롤러를 찾을 수 없습니다."));
         return;
     }
 
@@ -135,7 +140,7 @@ void UDMMainMenuWidget::HandleRefreshSessionsClicked()
 
     if (!IsValid(Controller))
     {
-        SetJoinError(FText::FromString(TEXT("메뉴 컨트롤러를 찾을 수 없습니다.")));
+        SetJoinError(NSLOCTEXT("DMMainMenu", "ControllerMissing", "메뉴 컨트롤러를 찾을 수 없습니다."));
         return;
     }
 
@@ -148,7 +153,7 @@ void UDMMainMenuWidget::HandleJoinConfirmClicked()
 
     if (!IsValid(Controller))
     {
-        SetJoinError(FText::FromString(TEXT("메뉴 컨트롤러를 찾을 수 없습니다.")));
+        SetJoinError(NSLOCTEXT("DMMainMenu", "ControllerMissing", "메뉴 컨트롤러를 찾을 수 없습니다."));
         return;
     }
 
@@ -161,7 +166,7 @@ void UDMMainMenuWidget::HandleJoinConfirmClicked()
 
     if (SelectedIndex == INDEX_NONE)
     {
-        SetJoinError(FText::FromString(TEXT("참가할 Steam 로비를 선택해주세요.")));
+        SetJoinError(NSLOCTEXT("DMMainMenu", "SelectSteamLobby", "참가할 Steam 로비를 선택해주세요."));
         return;
     }
 

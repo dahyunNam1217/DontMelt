@@ -168,7 +168,7 @@ void UDMAnnouncementWidget::HandleQuestProgressChanged(
     switch (NewProgress.State)
     {
     case EDMQuestParticipantState::CompletedInTime:
-        ShowMessage(NSLOCTEXT("DMAnnouncement", "QuestSuccess", "퀘스트 성공!"));
+        ShowMessage(NSLOCTEXT("DMAnnouncement", "QuestSuccess", "퀘스트 성공!"), QuestSuccessMessageDuration);
         break;
 
     case EDMQuestParticipantState::FailedPendingCompletion:
@@ -248,6 +248,11 @@ void UDMAnnouncementWidget::HandleRelicStolen()
 
 void UDMAnnouncementWidget::ShowMessage(const FText& Message)
 {
+    ShowMessage(Message, MessageDisplayDuration);
+}
+
+void UDMAnnouncementWidget::ShowMessage(const FText& Message, const float DisplayDuration)
+{
     if (!bPresentationActive || !IsValid(TXT_Announcement) || Message.IsEmpty())
     {
         return;
@@ -263,7 +268,7 @@ void UDMAnnouncementWidget::ShowMessage(const FText& Message)
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().SetTimer(
-            MessageTimerHandle, this, &ThisClass::HideMessage, FMath::Max(0.1f, MessageDisplayDuration), false
+            MessageTimerHandle, this, &ThisClass::HideMessage, FMath::Max(0.1f, DisplayDuration), false
         );
     }
 }

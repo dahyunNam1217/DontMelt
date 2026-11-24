@@ -36,6 +36,32 @@ struct FDMInvisibleTiming
     double EndServerTime = 0.0;
 };
 
+/** 감속 HUD에 필요한 서버 기준 시간 정보. */
+USTRUCT()
+struct FDMSlowMovementTiming
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    double StartServerTime = 0.0;
+
+    UPROPERTY()
+    double EndServerTime = 0.0;
+};
+
+/** 크기 증폭 HUD에 필요한 서버 기준 시간 정보. */
+USTRUCT()
+struct FDMSizeAmplificationTiming
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    double StartServerTime = 0.0;
+
+    UPROPERTY()
+    double EndServerTime = 0.0;
+};
+
 /**
  * Player와 NPC가 공유하는 주요 행동 상태의 SSOT.
  *
@@ -92,6 +118,17 @@ public:
     FDMInvisibleTiming GetInvisibleTiming() const
     {
         return InvisibleTiming;
+    }
+
+    /** 감속 효과의 서버 기준 시작·종료 시각을 반환한다. */
+    FDMSlowMovementTiming GetSlowMovementTiming() const
+    {
+        return SlowMovementTiming;
+    }
+
+    FDMSizeAmplificationTiming GetSizeAmplificationTiming() const
+    {
+        return SizeAmplificationTiming;
     }
 
     /**
@@ -226,6 +263,13 @@ private:
     UFUNCTION()
     void OnRep_InvisibleTiming();
 
+    /** 감속 시간 정보 복제 시 HUD와 이동 예측을 갱신한다. */
+    UFUNCTION()
+    void OnRep_SlowMovementTiming();
+
+    UFUNCTION()
+    void OnRep_SizeAmplificationTiming();
+
     /** 늦게 관련성에 들어온 Client도 현재 투명화 연출을 적용한다. */
     UFUNCTION()
     void OnRep_InvisibilityPresentationActive();
@@ -290,6 +334,14 @@ private:
      */
     UPROPERTY(ReplicatedUsing = OnRep_InvisibleTiming, Transient)
     FDMInvisibleTiming InvisibleTiming;
+
+    /** 감속 남은 시간 표시를 위한 소유자 전용 복제 데이터. */
+    UPROPERTY(ReplicatedUsing = OnRep_SlowMovementTiming, Transient)
+    FDMSlowMovementTiming SlowMovementTiming;
+
+    /** 크기 증폭 남은 시간 표시를 위한 소유자 전용 복제 데이터. */
+    UPROPERTY(ReplicatedUsing = OnRep_SizeAmplificationTiming, Transient)
+    FDMSizeAmplificationTiming SizeAmplificationTiming;
 
     /**
      * Status.Stunned의 관찰자용 표현값.

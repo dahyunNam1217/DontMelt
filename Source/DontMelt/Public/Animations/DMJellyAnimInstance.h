@@ -79,6 +79,14 @@ struct FDMJellyMotionTuning
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Locomotion")
     float SprintGaitRoll = 5.0f;
 
+    /** 걷기 중 몸통 전후 흔들림 각도. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Locomotion")
+    float WalkGaitPitch = 1.5f;
+
+    /** 달리기 중 몸통 전후 흔들림 각도. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Locomotion")
+    float SprintGaitPitch = 3.0f;
+
     /** 이동 중 회전할 때 상체가 늦게 따라오는 최대 각도. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Locomotion")
     float TurnLagAngle = 10.0f;

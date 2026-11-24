@@ -567,6 +567,33 @@ void ADMMatchGameState::HandleRandomEventPublicStateChanged()
     RandomEventPublicStateChangedDelegate.Broadcast(this, RandomEventPublicState);
 }
 
+void ADMMatchGameState::BroadcastWorldAudioEvent(
+    const EDMWorldAudioEvent EventType, const FVector& WorldLocation)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    MulticastWorldAudioEvent(EventType, WorldLocation);
+}
+
+void ADMMatchGameState::MulticastWorldAudioEvent_Implementation(
+    const EDMWorldAudioEvent EventType, const FVector_NetQuantize WorldLocation)
+{
+    UWorld* World = GetWorld();
+    if (!IsValid(World) || World->GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    if (ADMMatchPlayerController* LocalController =
+            Cast<ADMMatchPlayerController>(World->GetFirstPlayerController()))
+    {
+        LocalController->PlayWorldAudioEvent(EventType, WorldLocation);
+    }
+}
+
 #pragma endregion
 
 #pragma region Replication

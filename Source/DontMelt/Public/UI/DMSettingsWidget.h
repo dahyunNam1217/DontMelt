@@ -27,10 +27,10 @@ DECLARE_MULTICAST_DELEGATE(FDMOnSettingsClosed);
  */
 struct FDMSettingsValues
 {
-    // 그래픽 ComboBox는 표시 문자열을 그대로 비교한다.
+    // 해상도/FPS는 숫자 표현이며, 나머지 선택값은 언어와 무관한 내부 값으로 보관한다.
     FString ResolutionOption;
-    FString WindowModeOption;
-    FString GraphicsQualityOption;
+    EWindowMode::Type WindowMode = EWindowMode::WindowedFullscreen;
+    int32 GraphicsQualityLevel = 1;
     FString FrameRateLimitOption;
 
     bool bVSyncEnabled = false;
@@ -43,6 +43,9 @@ struct FDMSettingsValues
 
     // 설정창의 임시 음성 모드 선택값이다.
     bool bVoiceActivationEnabled = false;
+
+    /** 저장·비교에는 표시 문자열이 아닌 Unreal culture code를 사용한다. */
+    FString LanguageCode = TEXT("ko");
 
     // Slider 값은 부동소수점 오차를 허용해 비교한다.
     bool IsGraphicsEqual(const FDMSettingsValues& Other) const;

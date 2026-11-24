@@ -4,6 +4,7 @@
 
 #include "Characters/DMPlayerCharacter.h"
 #include "Characters/Components/DMCharacterStateComponent.h"
+#include "Characters/Components/DMSizeAmplificationComponent.h"
 #include "Characters/Components/DMPoseComponent.h"
 #include "Core/DMGameplayTags.h"
 #include "Data/DMSkillSetDataAsset.h"
@@ -26,6 +27,10 @@ namespace
     constexpr float VisionDistortEntryDuration = 0.75f;
 
     constexpr float VisionDistortExitDuration = 0.50f;
+
+    constexpr float SizeAmplificationTargetScale = 1.5f;
+
+    constexpr float SizeAmplificationTransitionDuration = 0.3f;
 }
 
 #pragma region Lifecycle
@@ -193,6 +198,32 @@ void UDMSkillComponent::CleanupOwnerPawnTransientSkillStatuses()
     if (StateComponent->HasStatus(DMGameplayTags::Status_VisionDistorted))
     {
         StateComponent->RemoveStatus(DMGameplayTags::Status_VisionDistorted);
+    }
+
+    // 감속은 Pawn 수명에 묶이므로 사망·연결 종료 시 즉시 제거한다.
+    if (StateComponent->HasStatus(DMGameplayTags::Status_SlowMovement))
+    {
+        StateComponent->RemoveStatus(DMGameplayTags::Status_SlowMovement);
+    }
+
+    if (StateComponent->HasStatus(DMGameplayTags::Status_SizeAmplified))
+    {
+        if (UDMSizeAmplificationComponent* SizeComponent = OwnerCharacter->GetSizeAmplificationComponent())
+        {
+            if (!SizeComponent->StopSizeAmplification(true))
+            {
+                UE_LOG(
+                    LogDMSkill,
+                    Error,
+                    TEXT("[%s] Size Amplification cleanup restored the original size but could not restore the capsule base location."),
+                    *GetNameSafe(OwnerCharacter)
+                );
+            }
+        }
+        else
+        {
+            StateComponent->RemoveStatus(DMGameplayTags::Status_SizeAmplified);
+        }
     }
 }
 
@@ -575,6 +606,16 @@ bool UDMSkillComponent::IsTargetAlreadyAffectedBySkill(const FGameplayTag& Skill
     if (SkillTag == DMGameplayTags::Skill_VisionDistort)
     {
         return CandidateStateComponent->HasStatus(DMGameplayTags::Status_VisionDistorted);
+    }
+
+    if (SkillTag == DMGameplayTags::Skill_SlowMovement)
+    {
+        return CandidateStateComponent->HasStatus(DMGameplayTags::Status_SlowMovement);
+    }
+
+    if (SkillTag == DMGameplayTags::Skill_SizeAmplification)
+    {
+        return CandidateStateComponent->HasStatus(DMGameplayTags::Status_SizeAmplified);
     }
 
     if (SkillTag == DMGameplayTags::Skill_FootstepAmplify)
@@ -1239,7 +1280,8 @@ bool UDMSkillComponent::TryExecuteFootstepAmplify(ADMMatchPlayerState* TargetPla
 
     TargetPlayerState->OnLifeStateChanged().AddUObject(this, &ThisClass::HandleFootstepAmplifyTargetLifeStateChanged);
 
-    FootstepAmplifyEndServerTime = DMGameplay::GetServerTimeSeconds(this) + static_cast<double>(Definition->Duration);
+    FootstepAmplifyStartServerTime = DMGameplay::GetServerTimeSeconds(this);
+    FootstepAmplifyEndServerTime = FootstepAmplifyStartServerTime + static_cast<double>(Definition->Duration);
 
     /*
      * Caster Client에게만 Target의 Audio ×2를 전달한다.
@@ -1259,6 +1301,8 @@ bool UDMSkillComponent::TryExecuteFootstepAmplify(ADMMatchPlayerState* TargetPla
 
         return false;
     }
+
+    TargetController->ClientPlayTargetedSkillHitSound(SkillTag);
 
     /*
      * 8초 effect duration.
@@ -1337,7 +1381,9 @@ void UDMSkillComponent::HandleFootstepAmplifyWarningDelayElapsed()
     }
 
     // 피해자에게 효과의 남은 시간을 정확히 계산할 수 있게 한다.
-    TargetController->ClientNotifyFootstepAmplifyWarning(FootstepAmplifyEndServerTime);
+    TargetController->ClientNotifyFootstepAmplifyWarning(
+        FootstepAmplifyStartServerTime, FootstepAmplifyEndServerTime
+    );
 
     UE_LOG(
         LogDMSkill,
@@ -1377,6 +1423,8 @@ void UDMSkillComponent::ClearFootstepAmplifyEffect(const bool bNotifyCasterClien
     }
 
     ActiveFootstepAmplifyTarget.Reset();
+
+    FootstepAmplifyStartServerTime = 0.0;
 
     FootstepAmplifyEndServerTime = 0.0;
 }
@@ -1492,6 +1540,8 @@ bool UDMSkillComponent::TryExecuteVisionDistort(ADMMatchPlayerState* TargetPlaye
         return false;
     }
 
+    TargetController->ClientPlayTargetedSkillHitSound(SkillTag);
+
     UE_LOG(
         LogDMSkill,
         Log,
@@ -1502,6 +1552,133 @@ bool UDMSkillComponent::TryExecuteVisionDistort(ADMMatchPlayerState* TargetPlaye
         MainDuration,
         VisionDistortExitDuration,
         TotalDuration,
+        Definition->Cooldown
+    );
+
+    return true;
+}
+
+bool UDMSkillComponent::TryExecuteSlowMovement(ADMMatchPlayerState* TargetPlayerState)
+{
+    if (!HasServerAuthority() || !IsSkillSystemInitialized() || !IsValid(TargetPlayerState))
+    {
+        return false;
+    }
+
+    const FGameplayTag& SkillTag = DMGameplayTags::Skill_SlowMovement;
+    const FDMActionAvailabilityResult Availability = GetSkillAvailability(SkillTag);
+
+    if (!Availability.bAllowed || !IsTargetEligibleForSkill(SkillTag, TargetPlayerState))
+    {
+        return false;
+    }
+
+    const FDMSkillDefinition* Definition = SkillSetData->FindSkillDefinition(SkillTag);
+
+    if (Definition == nullptr || !Definition->bRequiresTargetSelection || Definition->Duration <= 0.0f)
+    {
+        return false;
+    }
+
+    ADMPlayerCharacter* TargetCharacter = Cast<ADMPlayerCharacter>(TargetPlayerState->GetPawn());
+    UDMCharacterStateComponent* TargetStateComponent =
+        IsValid(TargetCharacter) ? TargetCharacter->GetCharacterStateComponent() : nullptr;
+
+    if (!IsValid(TargetStateComponent))
+    {
+        return false;
+    }
+
+    // 동일 상태는 ApplyTimedStatus에서 거부되며 기존 종료 시각을 갱신하지 않는다.
+    if (!TargetStateComponent->ApplyTimedStatus(DMGameplayTags::Status_SlowMovement, Definition->Duration))
+    {
+        return false;
+    }
+
+    if (!ensureMsgf(
+            StartSkillCooldown(SkillTag),
+            TEXT("[%s] Slow Movement cooldown commit failed. Status was rolled back."),
+            *GetNameSafe(GetOwner())
+        ))
+    {
+        TargetStateComponent->RemoveStatus(DMGameplayTags::Status_SlowMovement);
+        return false;
+    }
+
+    if (ADMMatchPlayerController* TargetController = Cast<ADMMatchPlayerController>(TargetPlayerState->GetOwner()))
+    {
+        TargetController->ClientPlayTargetedSkillHitSound(SkillTag);
+    }
+
+    UE_LOG(
+        LogDMSkill,
+        Log,
+        TEXT("[%s] Slow Movement activated. Target=%s, Duration=%.3f, Cooldown=%.3f"),
+        *GetNameSafe(GetOwner()),
+        *GetNameSafe(TargetPlayerState),
+        Definition->Duration,
+        Definition->Cooldown
+    );
+
+    return true;
+}
+
+bool UDMSkillComponent::TryExecuteSizeAmplification(ADMMatchPlayerState* TargetPlayerState)
+{
+    if (!HasServerAuthority() || !IsSkillSystemInitialized() || !IsValid(TargetPlayerState))
+    {
+        return false;
+    }
+
+    const FGameplayTag& SkillTag = DMGameplayTags::Skill_SizeAmplification;
+    const FDMActionAvailabilityResult Availability = GetSkillAvailability(SkillTag);
+
+    if (!Availability.bAllowed || !IsTargetEligibleForSkill(SkillTag, TargetPlayerState))
+    {
+        return false;
+    }
+
+    const FDMSkillDefinition* Definition = SkillSetData->FindSkillDefinition(SkillTag);
+    if (Definition == nullptr || !Definition->bRequiresTargetSelection || Definition->Duration <= 0.0f)
+    {
+        return false;
+    }
+
+    ADMPlayerCharacter* TargetCharacter = Cast<ADMPlayerCharacter>(TargetPlayerState->GetPawn());
+    UDMSizeAmplificationComponent* SizeComponent =
+        IsValid(TargetCharacter) ? TargetCharacter->GetSizeAmplificationComponent() : nullptr;
+
+    if (!IsValid(SizeComponent)
+        || !SizeComponent->TryStartSizeAmplification(
+            Definition->Duration, SizeAmplificationTargetScale, SizeAmplificationTransitionDuration
+        ))
+    {
+        return false;
+    }
+
+    if (!ensureMsgf(
+            StartSkillCooldown(SkillTag),
+            TEXT("[%s] Size Amplification cooldown commit failed. Effect was rolled back."),
+            *GetNameSafe(GetOwner())
+        ))
+    {
+        SizeComponent->StopSizeAmplification(true);
+        return false;
+    }
+
+    if (ADMMatchPlayerController* TargetController = Cast<ADMMatchPlayerController>(TargetPlayerState->GetOwner()))
+    {
+        TargetController->ClientPlayTargetedSkillHitSound(SkillTag);
+    }
+
+    UE_LOG(
+        LogDMSkill,
+        Log,
+        TEXT("[%s] Size Amplification activated. Target=%s, Scale=%.2f, Duration=%.3f, Cooldown=%.3f"),
+        *GetNameSafe(GetOwner()),
+        *GetNameSafe(TargetPlayerState),
+        SizeAmplificationTargetScale,
+        Definition->Duration,
         Definition->Cooldown
     );
 

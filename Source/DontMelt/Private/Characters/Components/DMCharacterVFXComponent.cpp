@@ -13,7 +13,6 @@ namespace DMCharacterVFX
 {
     // Skeleton에 생성할 Socket 이름과 일치해야 한다.
     const FName AttackSocket(TEXT("FX_Attack_Front"));
-    const FName NPCAlertSocket(TEXT("FX_Alert_Right"));
     const FName StunSocket(TEXT("FX_Stun_Head"));
     const FName DefenseSocket(TEXT("FX_Defense_Back"));
 }
@@ -107,33 +106,72 @@ void UDMCharacterVFXComponent::SpawnOneShot(
 
 void UDMCharacterVFXComponent::PlayAttackEffect()
 {
-    SpawnOneShot(AttackEffect.Get(), DMCharacterVFX::AttackSocket, AttackLocalOffset, AttackLocalRotation);
-}
+    if (!CanPresentLocally())
+    {
+        return;
+    }
 
-void UDMCharacterVFXComponent::PlayNPCAlertEffect()
-{
-    SpawnOneShot(NPCAlertEffect.Get(), DMCharacterVFX::NPCAlertSocket, AlertLocalOffset, AlertLocalRotation);
+    if (ADMJellyCharacterBase* OwnerCharacter = Cast<ADMJellyCharacterBase>(GetOwner()))
+    {
+        if (UNiagaraComponent* ViewportEffect = OwnerCharacter->GetAttackVFXComponent())
+        {
+            if (IsValid(ViewportEffect->GetAsset()))
+            {
+                ViewportEffect->DeactivateImmediate();
+                ViewportEffect->ReinitializeSystem();
+                ViewportEffect->Activate(true);
+                return;
+            }
+        }
+    }
+
+    // 기존 BP가 새 컴포넌트 에셋을 연결하기 전에는 이전 설정을 사용한다.
+    SpawnOneShot(AttackEffect.Get(), DMCharacterVFX::AttackSocket, AttackLocalOffset, AttackLocalRotation);
 }
 
 void UDMCharacterVFXComponent::PlayDefenseEffect()
 {
     StopDefenseEffect();
-    if (!CanPresentLocally() || !IsValid(DefenseEffect.Get()))
+    if (!CanPresentLocally())
     {
         return;
     }
 
-    USkeletalMeshComponent* MeshComponent = GetOwnerMesh();
-    if (!IsValid(MeshComponent) || !MeshComponent->DoesSocketExist(DMCharacterVFX::DefenseSocket))
+    if (ADMJellyCharacterBase* OwnerCharacter = Cast<ADMJellyCharacterBase>(GetOwner()))
     {
-        return;
+        if (UNiagaraComponent* ViewportEffect = OwnerCharacter->GetDefenseVFXComponent())
+        {
+            if (IsValid(ViewportEffect->GetAsset()))
+            {
+                ViewportEffect->DeactivateImmediate();
+                ViewportEffect->ReinitializeSystem();
+                ViewportEffect->Activate(true);
+                ActiveDefenseEffect = ViewportEffect;
+                bDefenseEffectSpawnedDynamically = false;
+            }
+        }
     }
 
-    ActiveDefenseEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(
-        DefenseEffect.Get(), MeshComponent, DMCharacterVFX::DefenseSocket,
-        DefenseLocalOffset, DefenseLocalRotation, EAttachLocation::KeepRelativeOffset,
-        false, true, ENCPoolMethod::None, true
-    );
+    if (!ActiveDefenseEffect.IsValid())
+    {
+        if (!IsValid(DefenseEffect.Get()))
+        {
+            return;
+        }
+
+        USkeletalMeshComponent* MeshComponent = GetOwnerMesh();
+        if (!IsValid(MeshComponent) || !MeshComponent->DoesSocketExist(DMCharacterVFX::DefenseSocket))
+        {
+            return;
+        }
+
+        ActiveDefenseEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(
+            DefenseEffect.Get(), MeshComponent, DMCharacterVFX::DefenseSocket,
+            DefenseLocalOffset, DefenseLocalRotation, EAttachLocation::KeepRelativeOffset,
+            false, true, ENCPoolMethod::None, true
+        );
+        bDefenseEffectSpawnedDynamically = ActiveDefenseEffect.IsValid();
+    }
 
     if (ActiveDefenseEffect.IsValid())
     {
@@ -154,9 +192,13 @@ void UDMCharacterVFXComponent::StopDefenseEffect()
     if (UNiagaraComponent* ExistingEffect = ActiveDefenseEffect.Get())
     {
         ExistingEffect->DeactivateImmediate();
-        ExistingEffect->DestroyComponent();
+        if (bDefenseEffectSpawnedDynamically)
+        {
+            ExistingEffect->DestroyComponent();
+        }
     }
     ActiveDefenseEffect.Reset();
+    bDefenseEffectSpawnedDynamically = false;
 }
 
 void UDMCharacterVFXComponent::SetStunEffectActive(const bool bActive)
@@ -168,10 +210,14 @@ void UDMCharacterVFXComponent::SetStunEffectActive(const bool bActive)
         {
             // Infinite Loop Niagara도 상태 종료와 동시에 화면에서 제거한다.
             ExistingEffect->DeactivateImmediate();
-            ExistingEffect->DestroyComponent();
+            if (bStunEffectSpawnedDynamically)
+            {
+                ExistingEffect->DestroyComponent();
+            }
         }
 
         ActiveStunEffect.Reset();
+        bStunEffectSpawnedDynamically = false;
         return;
     }
 
@@ -181,7 +227,26 @@ void UDMCharacterVFXComponent::SetStunEffectActive(const bool bActive)
         return;
     }
 
-    if (!CanPresentLocally() || !IsValid(StunEffect.Get()))
+    if (!CanPresentLocally())
+    {
+        return;
+    }
+
+    if (ADMJellyCharacterBase* OwnerCharacter = Cast<ADMJellyCharacterBase>(GetOwner()))
+    {
+        if (UNiagaraComponent* ViewportEffect = OwnerCharacter->GetStunVFXComponent())
+        {
+            if (IsValid(ViewportEffect->GetAsset()))
+            {
+                ViewportEffect->Activate(true);
+                ActiveStunEffect = ViewportEffect;
+                bStunEffectSpawnedDynamically = false;
+                return;
+            }
+        }
+    }
+
+    if (!IsValid(StunEffect.Get()))
     {
         return;
     }
@@ -219,6 +284,7 @@ void UDMCharacterVFXComponent::SetStunEffectActive(const bool bActive)
         ENCPoolMethod::None,
         false
     );
+    bStunEffectSpawnedDynamically = ActiveStunEffect.IsValid();
 }
 
 #pragma endregion

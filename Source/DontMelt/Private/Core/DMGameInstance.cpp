@@ -20,6 +20,9 @@
 #include "GameFramework/PlayerController.h"
 
 #include "Kismet/GameplayStatics.h"
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Button.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundBase.h"
 #include "Components/AudioComponent.h"
@@ -1374,6 +1377,35 @@ void UDMGameInstance::ApplyLocalAudioSettings(UWorld* TargetWorld)
         LocalSettings->GetSFXVolume(),
         LocalSettings->GetMusicVolume()
     );
+}
+
+void UDMGameInstance::PlayCommonUIClickSound()
+{
+    UWorld* World = GetWorld();
+    if (!IsValid(World) || !IsValid(CommonUIClickSound.Get()) || World->GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    UGameplayStatics::PlaySound2D(World, CommonUIClickSound.Get());
+}
+
+void UDMGameInstance::BindCommonUIClickSound(UUserWidget* Widget)
+{
+    if (!IsValid(Widget) || !IsValid(Widget->WidgetTree))
+    {
+        return;
+    }
+
+    TArray<UWidget*> Widgets;
+    Widget->WidgetTree->GetAllWidgets(Widgets);
+    for (UWidget* Candidate : Widgets)
+    {
+        if (UButton* Button = Cast<UButton>(Candidate))
+        {
+            Button->OnClicked.AddUniqueDynamic(this, &ThisClass::PlayCommonUIClickSound);
+        }
+    }
 }
 
 #pragma endregion

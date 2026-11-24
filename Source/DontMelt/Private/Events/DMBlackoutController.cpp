@@ -1,6 +1,7 @@
 ﻿#include "Events/DMBlackoutController.h"
 
 #include "Core/DMGameplayTags.h"
+#include "Characters/DMNPCCharacter.h"
 #include "Framework/Match/DMMatchGameState.h"
 
 #include "Components/LightComponentBase.h"
@@ -9,11 +10,13 @@
 #include "Components/SkyLightComponent.h"
 
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInterface.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDMBlackoutController, Log, All);
 
@@ -367,6 +370,15 @@ void ADMBlackoutController::SetManagedLightsOff()
 
 void ADMBlackoutController::ScheduleBlackoutPresentation(const FDMRandomEventRuntimeState& EventState)
 {
+    const bool bSameBlackoutWindow = FMath::IsNearlyEqual(ActiveBlackoutStartServerTime, EventState.StartServerTime)
+        && FMath::IsNearlyEqual(ActiveBlackoutEndServerTime, EventState.EndServerTime)
+        && (bBlackoutActive || GetWorldTimerManager().IsTimerActive(BlackoutStartTimerHandle));
+
+    if (bSameBlackoutWindow)
+    {
+        return;
+    }
+
     ResetBlackoutPresentation();
 
     if (!EventState.EventTag.IsValid() || EventState.EventTag != DMGameplayTags::RandomEvent_Blackout)
@@ -517,6 +529,8 @@ void ADMBlackoutController::BeginBlackout()
         CreateLocalVisibilityLight();
     }
 
+    BeginNPCBlackoutPresentation();
+
     UE_LOG(LogDMBlackoutController, Log, TEXT("Blackout presentation started. ManagedLights=%d"), ManagedLights.Num());
 }
 
@@ -548,6 +562,8 @@ void ADMBlackoutController::ResetBlackoutPresentation()
 
     GetWorldTimerManager().ClearTimer(BlackoutEndTimerHandle);
 
+    RestoreNPCBlackoutPresentation();
+
     // 일반 조명의 Visibility를 원래 상태로 복구한다.
     RestoreManagedLights();
 
@@ -563,6 +579,174 @@ void ADMBlackoutController::ResetBlackoutPresentation()
     bFlickerLightsOff = false;
 
     bBlackoutActive = false;
+}
+
+void ADMBlackoutController::BeginNPCBlackoutPresentation()
+{
+    UWorld* World = GetWorld();
+
+    if (!IsValid(World) || !IsValid(NPCBlackoutMaterial) || NPCBlackoutFadeParameterName.IsNone())
+    {
+        if (!IsValid(NPCBlackoutMaterial))
+        {
+            UE_LOG(LogDMBlackoutController, Warning, TEXT("NPC blackout material is not configured."));
+        }
+        return;
+    }
+
+    float ExistingParameterValue = 0.0f;
+
+    if (!NPCBlackoutMaterial->GetScalarParameterValue(
+            FHashedMaterialParameterInfo(NPCBlackoutFadeParameterName), ExistingParameterValue
+        ))
+    {
+        UE_LOG(
+            LogDMBlackoutController,
+            Warning,
+            TEXT("NPC blackout material is missing scalar parameter. Material=%s, Parameter=%s"),
+            *GetNameSafe(NPCBlackoutMaterial),
+            *NPCBlackoutFadeParameterName.ToString()
+        );
+        return;
+    }
+
+    BlackoutNPCs.Reset();
+
+    for (TActorIterator<ADMNPCCharacter> It(World); It; ++It)
+    {
+        ApplyBlackoutToNPC(*It);
+    }
+
+    if (!ActorSpawnedDelegateHandle.IsValid())
+    {
+        ActorSpawnedDelegateHandle = World->AddOnActorSpawnedHandler(
+            FOnActorSpawned::FDelegate::CreateUObject(this, &ThisClass::HandleActorSpawned)
+        );
+    }
+
+    UpdateNPCBlackoutFade();
+}
+
+void ADMBlackoutController::UpdateNPCBlackoutFade()
+{
+    if (!bBlackoutActive)
+    {
+        GetWorldTimerManager().ClearTimer(NPCBlackoutFadeTimerHandle);
+        return;
+    }
+
+    const double ServerNow = GetCurrentServerTime();
+
+    if (ServerNow <= 0.0 || ServerNow >= ActiveBlackoutEndServerTime)
+    {
+        return;
+    }
+
+    const float FadeDuration = FMath::Max(NPCBlackoutFadeDuration, 0.0f);
+    const float FadeAlpha = FadeDuration <= KINDA_SMALL_NUMBER
+        ? 1.0f
+        : FMath::Clamp(
+              static_cast<float>((ServerNow - ActiveBlackoutStartServerTime) / static_cast<double>(FadeDuration)),
+              0.0f,
+              1.0f
+          );
+
+    for (int32 Index = BlackoutNPCs.Num() - 1; Index >= 0; --Index)
+    {
+        ADMNPCCharacter* NPCCharacter = BlackoutNPCs[Index].Get();
+
+        if (!IsValid(NPCCharacter))
+        {
+            BlackoutNPCs.RemoveAtSwap(Index, 1, EAllowShrinking::No);
+            continue;
+        }
+
+        NPCCharacter->SetBlackoutMaterialFade(FadeAlpha);
+    }
+
+    if (FadeAlpha >= 1.0f)
+    {
+        GetWorldTimerManager().ClearTimer(NPCBlackoutFadeTimerHandle);
+        return;
+    }
+
+    if (!GetWorldTimerManager().IsTimerActive(NPCBlackoutFadeTimerHandle))
+    {
+        GetWorldTimerManager().SetTimer(
+            NPCBlackoutFadeTimerHandle,
+            this,
+            &ThisClass::UpdateNPCBlackoutFade,
+            FMath::Max(NPCBlackoutFadeUpdateInterval, 0.016f),
+            true
+        );
+    }
+}
+
+void ADMBlackoutController::RestoreNPCBlackoutPresentation()
+{
+    GetWorldTimerManager().ClearTimer(NPCBlackoutFadeTimerHandle);
+
+    if (UWorld* World = GetWorld(); IsValid(World) && ActorSpawnedDelegateHandle.IsValid())
+    {
+        World->RemoveOnActorSpawnedHandler(ActorSpawnedDelegateHandle);
+    }
+
+    ActorSpawnedDelegateHandle.Reset();
+
+    for (const TWeakObjectPtr<ADMNPCCharacter>& NPCPointer : BlackoutNPCs)
+    {
+        if (ADMNPCCharacter* NPCCharacter = NPCPointer.Get(); IsValid(NPCCharacter))
+        {
+            NPCCharacter->EndBlackoutMaterialPresentation();
+        }
+    }
+
+    BlackoutNPCs.Reset();
+}
+
+void ADMBlackoutController::HandleActorSpawned(AActor* SpawnedActor)
+{
+    if (!bBlackoutActive || GetCurrentServerTime() >= ActiveBlackoutEndServerTime)
+    {
+        return;
+    }
+
+    ApplyBlackoutToNPC(Cast<ADMNPCCharacter>(SpawnedActor));
+}
+
+void ADMBlackoutController::ApplyBlackoutToNPC(ADMNPCCharacter* NPCCharacter)
+{
+    const bool bAlreadyManaged = BlackoutNPCs.ContainsByPredicate(
+        [NPCCharacter](const TWeakObjectPtr<ADMNPCCharacter>& NPCPointer)
+        {
+            return NPCPointer.Get() == NPCCharacter;
+        }
+    );
+
+    if (!IsValid(NPCCharacter) || bAlreadyManaged)
+    {
+        return;
+    }
+
+    const double ServerNow = GetCurrentServerTime();
+    const float FadeDuration = FMath::Max(NPCBlackoutFadeDuration, 0.0f);
+    const float FadeAlpha = FadeDuration <= KINDA_SMALL_NUMBER
+        ? 1.0f
+        : FMath::Clamp(
+              static_cast<float>((ServerNow - ActiveBlackoutStartServerTime) / static_cast<double>(FadeDuration)),
+              0.0f,
+              1.0f
+          );
+
+    if (NPCCharacter->BeginBlackoutMaterialPresentation(
+            NPCBlackoutMaterial,
+            NPCBlackoutFadeParameterName,
+            FadeAlpha,
+            NPCBlackoutMaterialSlots
+        ))
+    {
+        BlackoutNPCs.Add(NPCCharacter);
+    }
 }
 
 #pragma endregion

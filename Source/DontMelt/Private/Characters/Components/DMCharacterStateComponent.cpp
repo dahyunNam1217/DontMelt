@@ -35,6 +35,11 @@ void UDMCharacterStateComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
     // 투명화 시간은 효과를 받은 소유 플레이어에게만 전달한다.
     DOREPLIFETIME_CONDITION(UDMCharacterStateComponent, InvisibleTiming, COND_OwnerOnly);
 
+    // 감속 시간은 효과를 받은 소유 플레이어에게만 전달한다.
+    DOREPLIFETIME_CONDITION(UDMCharacterStateComponent, SlowMovementTiming, COND_OwnerOnly);
+
+    DOREPLIFETIME_CONDITION(UDMCharacterStateComponent, SizeAmplificationTiming, COND_OwnerOnly);
+
     // 스턴 표현용 bool은 관찰자에게도 복제한다.
     // 실제 상태 태그의 OwnerOnly 정책은 변경하지 않는다.
     DOREPLIFETIME(UDMCharacterStateComponent, bStunPresentationActive);
@@ -340,6 +345,17 @@ bool UDMCharacterStateComponent::ApplyTimedStatus(const FGameplayTag& StatusTag,
         InvisibleTiming.EndServerTime = InvisibleTiming.StartServerTime + static_cast<double>(Duration);
     }
 
+    else if (StatusTag.MatchesTagExact(DMGameplayTags::Status_SlowMovement))
+    {
+        SlowMovementTiming.StartServerTime = static_cast<double>(World->GetTimeSeconds());
+        SlowMovementTiming.EndServerTime = SlowMovementTiming.StartServerTime + static_cast<double>(Duration);
+    }
+    else if (StatusTag.MatchesTagExact(DMGameplayTags::Status_SizeAmplified))
+    {
+        SizeAmplificationTiming.StartServerTime = static_cast<double>(World->GetTimeSeconds());
+        SizeAmplificationTiming.EndServerTime = SizeAmplificationTiming.StartServerTime + static_cast<double>(Duration);
+    }
+
     ActiveStatusTags.AddTag(StatusTag);
 
     // Listen Server의 로컬 UI에도 변경을 전달한다.
@@ -402,6 +418,16 @@ void UDMCharacterStateComponent::OnRep_InvisibleTiming()
     StatusChangedDelegate.Broadcast();
 }
 
+void UDMCharacterStateComponent::OnRep_SlowMovementTiming()
+{
+    StatusChangedDelegate.Broadcast();
+}
+
+void UDMCharacterStateComponent::OnRep_SizeAmplificationTiming()
+{
+    StatusChangedDelegate.Broadcast();
+}
+
 bool UDMCharacterStateComponent::RemoveStatus(const FGameplayTag& StatusTag)
 {
     AActor* OwnerActor = GetOwner();
@@ -432,6 +458,14 @@ bool UDMCharacterStateComponent::RemoveStatus(const FGameplayTag& StatusTag)
     if (StatusTag.MatchesTagExact(DMGameplayTags::Status_Invisible))
     {
         InvisibleTiming = FDMInvisibleTiming();
+    }
+    else if (StatusTag.MatchesTagExact(DMGameplayTags::Status_SlowMovement))
+    {
+        SlowMovementTiming = FDMSlowMovementTiming();
+    }
+    else if (StatusTag.MatchesTagExact(DMGameplayTags::Status_SizeAmplified))
+    {
+        SizeAmplificationTiming = FDMSizeAmplificationTiming();
     }
 
     // 서버에서 상태가 제거되었음을 로컬 UI에 알린다.
@@ -466,6 +500,14 @@ void UDMCharacterStateComponent::HandleStatusExpired(const FGameplayTag StatusTa
     if (StatusTag.MatchesTagExact(DMGameplayTags::Status_Invisible))
     {
         InvisibleTiming = FDMInvisibleTiming();
+    }
+    else if (StatusTag.MatchesTagExact(DMGameplayTags::Status_SlowMovement))
+    {
+        SlowMovementTiming = FDMSlowMovementTiming();
+    }
+    else if (StatusTag.MatchesTagExact(DMGameplayTags::Status_SizeAmplified))
+    {
+        SizeAmplificationTiming = FDMSizeAmplificationTiming();
     }
 
     // 서버 타이머에 의해 상태가 만료된 경우에도 UI를 갱신한다.

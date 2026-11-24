@@ -43,4 +43,12 @@ public:
     float MouseSensitivity = 1.0f;
 
 #pragma endregion
+
+#pragma region Localization
+
+    /** Unreal culture code. 현재 지원 대상은 ko와 en이다. */
+    UPROPERTY()
+    FString LanguageCode = TEXT("ko");
+
+#pragma endregion
 };

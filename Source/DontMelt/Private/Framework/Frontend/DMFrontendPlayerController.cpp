@@ -121,7 +121,7 @@ bool ADMFrontendPlayerController::HostLobby()
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetHostCreationState(
-                false, FText::FromString(TEXT("현재 상태에서는 방을 생성할 수 없습니다."))
+                false, NSLOCTEXT("DMFrontend", "CannotCreateRoomNow", "현재 상태에서는 방을 생성할 수 없습니다.")
             );
         }
 
@@ -138,7 +138,7 @@ bool ADMFrontendPlayerController::HostLobby()
     {
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetHostCreationState(false, FText::FromString(TEXT("로비 맵이 설정되지 않았습니다.")));
+            MainMenuWidget->SetHostCreationState(false, NSLOCTEXT("DMFrontend", "LobbyMapMissing", "로비 맵이 설정되지 않았습니다."));
         }
 
         return false;
@@ -149,7 +149,7 @@ bool ADMFrontendPlayerController::HostLobby()
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetHostCreationState(
-                false, FText::FromString(TEXT("로비 규칙 데이터가 설정되지 않았습니다."))
+                false, NSLOCTEXT("DMFrontend", "LobbyRulesMissing", "로비 규칙 데이터가 설정되지 않았습니다.")
             );
         }
 
@@ -169,7 +169,7 @@ bool ADMFrontendPlayerController::HostLobby()
     {
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetHostCreationState(false, FText::FromString(TEXT("로비 인원 설정이 올바르지 않습니다.")));
+            MainMenuWidget->SetHostCreationState(false, NSLOCTEXT("DMFrontend", "InvalidLobbySize", "로비 인원 설정이 올바르지 않습니다."));
         }
 
         return false;
@@ -187,7 +187,10 @@ bool ADMFrontendPlayerController::HostLobby()
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetHostCreationState(
-                false, FText::FromString(TEXT("온라인 세션 시스템을 사용할 수 없습니다."))
+                false,
+                NSLOCTEXT(
+                    "DMFrontend", "HostSessionSubsystemUnavailable", "온라인 세션 시스템을 사용할 수 없습니다."
+                )
             );
         }
 
@@ -199,7 +202,7 @@ bool ADMFrontendPlayerController::HostLobby()
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetHostCreationState(
-                false, FText::FromString(TEXT("Steam 세션 복구가 완료되지 않았습니다. 게임과 Steam을 재시작하세요."))
+                false, NSLOCTEXT("DMFrontend", "SteamRecoveryBlocked", "Steam 세션 복구가 완료되지 않았습니다. 게임과 Steam을 재시작하세요.")
             );
         }
         return false;
@@ -211,7 +214,7 @@ bool ADMFrontendPlayerController::HostLobby()
 
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetHostCreationState(false, FText::FromString(TEXT("다른 온라인 작업이 진행 중입니다.")));
+            MainMenuWidget->SetHostCreationState(false, NSLOCTEXT("DMFrontend", "OnlineOperationBusy", "다른 온라인 작업이 진행 중입니다."));
         }
 
         return false;
@@ -225,7 +228,7 @@ bool ADMFrontendPlayerController::HostLobby()
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetHostCreationState(
-                false, FText::FromString(TEXT("이전 세션을 정리하는 중입니다. 잠시 후 다시 시도하세요."))
+                false, NSLOCTEXT("DMFrontend", "CleaningPreviousSession", "이전 세션을 정리하는 중입니다. 잠시 후 다시 시도하세요.")
             );
         }
 
@@ -241,7 +244,7 @@ bool ADMFrontendPlayerController::HostLobby()
 
     if (IsValid(MainMenuWidget.Get()))
     {
-        MainMenuWidget->SetHostCreationState(true, FText::FromString(TEXT("Steam 로비를 생성하는 중입니다...")));
+        MainMenuWidget->SetHostCreationState(true, NSLOCTEXT("DMFrontend", "CreatingSteamLobby", "Steam 로비를 생성하는 중입니다..."));
     }
 
     UE_LOG(LogDMFrontend, Log, TEXT("Requesting Steam lobby session. MaxPlayers=%d"), MaxPlayers);
@@ -257,7 +260,7 @@ bool ADMFrontendPlayerController::HostLobby()
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetHostCreationState(
-                false, FText::FromString(TEXT("Steam 로비 생성 요청에 실패했습니다."))
+                false, NSLOCTEXT("DMFrontend", "CreateSteamLobbyRequestFailed", "Steam 로비 생성 요청에 실패했습니다.")
             );
         }
     }
@@ -289,7 +292,7 @@ bool ADMFrontendPlayerController::FindSteamLobbies()
     {
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetSteamJoinBusy(false, FText::FromString(TEXT("Steam 세션 시스템을 찾을 수 없습니다.")));
+            MainMenuWidget->SetSteamJoinBusy(false, NSLOCTEXT("DMFrontend", "SteamSessionMissing", "Steam 세션 시스템을 찾을 수 없습니다."));
         }
         return false;
     }
@@ -299,7 +302,7 @@ bool ADMFrontendPlayerController::FindSteamLobbies()
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetSteamJoinBusy(
-                false, FText::FromString(TEXT("Steam 세션 복구가 완료되지 않았습니다. 게임과 Steam을 재시작하세요."))
+                false, NSLOCTEXT("DMFrontend", "SteamRecoveryBlocked", "Steam 세션 복구가 완료되지 않았습니다. 게임과 Steam을 재시작하세요.")
             );
         }
         return false;
@@ -309,7 +312,7 @@ bool ADMFrontendPlayerController::FindSteamLobbies()
     {
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetSteamJoinBusy(false, FText::FromString(TEXT("다른 온라인 작업이 진행 중입니다.")));
+            MainMenuWidget->SetSteamJoinBusy(false, NSLOCTEXT("DMFrontend", "OnlineOperationBusy", "다른 온라인 작업이 진행 중입니다."));
         }
         return false;
     }
@@ -324,7 +327,7 @@ bool ADMFrontendPlayerController::FindSteamLobbies()
     {
         MainMenuWidget->SetSteamSessionOptions(TArray<FString>());
 
-        MainMenuWidget->SetSteamJoinBusy(true, FText::FromString(TEXT("Steam 로비를 검색하고 있습니다...")));
+        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "SearchingSteamLobby", "Steam 로비를 검색하고 있습니다..."));
     }
 
     UE_LOG(LogDMFrontend, Log, TEXT("Steam lobby search requested."));
@@ -339,7 +342,7 @@ bool ADMFrontendPlayerController::FindSteamLobbies()
 
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetSteamJoinBusy(false, FText::FromString(TEXT("Steam 로비 검색 요청에 실패했습니다.")));
+            MainMenuWidget->SetSteamJoinBusy(false, NSLOCTEXT("DMFrontend", "SearchSteamLobbyRequestFailed", "Steam 로비 검색 요청에 실패했습니다."));
         }
     }
 
@@ -369,7 +372,9 @@ bool ADMFrontendPlayerController::JoinSteamLobby(const int32 ResultIndex)
     {
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetSteamJoinBusy(false, FText::FromString(TEXT("온라인 세션을 사용할 수 없습니다.")));
+            MainMenuWidget->SetSteamJoinBusy(
+                false, NSLOCTEXT("DMFrontend", "JoinSessionUnavailable", "온라인 세션을 사용할 수 없습니다.")
+            );
         }
         return false;
     }
@@ -379,7 +384,7 @@ bool ADMFrontendPlayerController::JoinSteamLobby(const int32 ResultIndex)
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetSteamJoinBusy(
-                false, FText::FromString(TEXT("Steam 세션 복구가 완료되지 않았습니다. 게임과 Steam을 재시작하세요."))
+                false, NSLOCTEXT("DMFrontend", "SteamRecoveryBlocked", "Steam 세션 복구가 완료되지 않았습니다. 게임과 Steam을 재시작하세요.")
             );
         }
         return false;
@@ -394,7 +399,7 @@ bool ADMFrontendPlayerController::JoinSteamLobby(const int32 ResultIndex)
         {
             MainMenuWidget->SetSteamJoinBusy(
                 false,
-                FText::FromString(TEXT("이전 세션을 정리하는 중입니다. 방 목록을 새로고침한 뒤 다시 시도하세요."))
+                NSLOCTEXT("DMFrontend", "CleanupBeforeRefresh", "이전 세션을 정리하는 중입니다. 방 목록을 새로고침한 뒤 다시 시도하세요.")
             );
         }
 
@@ -405,7 +410,7 @@ bool ADMFrontendPlayerController::JoinSteamLobby(const int32 ResultIndex)
     {
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetSteamJoinBusy(false, FText::FromString(TEXT("참가할 방을 선택해주세요.")));
+            MainMenuWidget->SetSteamJoinBusy(false, NSLOCTEXT("DMFrontend", "SelectRoom", "참가할 방을 선택해주세요."));
         }
         return false;
     }
@@ -414,7 +419,7 @@ bool ADMFrontendPlayerController::JoinSteamLobby(const int32 ResultIndex)
     {
         if (IsValid(MainMenuWidget.Get()))
         {
-            MainMenuWidget->SetSteamJoinBusy(false, FText::FromString(TEXT("선택한 방의 정원이 가득 찼습니다.")));
+            MainMenuWidget->SetSteamJoinBusy(false, NSLOCTEXT("DMFrontend", "RoomFull", "선택한 방의 정원이 가득 찼습니다."));
         }
         return false;
     }
@@ -427,7 +432,7 @@ bool ADMFrontendPlayerController::JoinSteamLobby(const int32 ResultIndex)
 
     if (IsValid(MainMenuWidget.Get()))
     {
-        MainMenuWidget->SetSteamJoinBusy(true, FText::FromString(TEXT("Steam 로비 참가를 요청하는 중입니다...")));
+        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "JoiningSteamLobby", "Steam 로비 참가를 요청하는 중입니다..."));
     }
 
     UE_LOG(LogDMFrontend, Log, TEXT("Steam join requested. ResultIndex=%d"), ResultIndex);
@@ -551,7 +556,7 @@ void ADMFrontendPlayerController::HandleHostSessionCreated(const bool bWasSucces
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetHostCreationState(
-                false, FText::FromString(TEXT("로비 이동 조건을 확인할 수 없습니다."))
+                false, NSLOCTEXT("DMFrontend", "LobbyTravelUnavailable", "로비 이동 조건을 확인할 수 없습니다.")
             );
         }
 
@@ -563,7 +568,7 @@ void ADMFrontendPlayerController::HandleHostSessionCreated(const bool bWasSucces
     if (IsValid(MainMenuWidget.Get()))
     {
         MainMenuWidget->SetHostCreationState(
-            true, FText::FromString(TEXT("Steam 로비 생성 완료. 로비로 이동합니다..."))
+            true, NSLOCTEXT("DMFrontend", "SteamLobbyCreated", "Steam 로비 생성 완료. 로비로 이동합니다...")
         );
     }
 
@@ -646,8 +651,10 @@ void ADMFrontendPlayerController::HandleSteamFindCompleted(const bool bWasSucces
         MainMenuWidget->SetSteamSessionOptions(DisplayOptions);
 
         const FText ResultMessage = ResultCount > 0
-            ? FText::FromString(FString::Printf(TEXT("%d개의 로비를 찾았습니다."), ResultCount))
-            : FText::FromString(TEXT("검색된 로비가 없습니다."));
+            ? FText::Format(
+                NSLOCTEXT("DMFrontend", "LobbySearchCount", "{0}개의 로비를 찾았습니다."),
+                FText::AsNumber(ResultCount))
+            : NSLOCTEXT("DMFrontend", "NoLobbyFound", "검색된 로비가 없습니다.");
 
         MainMenuWidget->SetSteamJoinBusy(false, ResultMessage);
     }
@@ -692,7 +699,7 @@ void ADMFrontendPlayerController::HandleSteamJoinCompleted(const bool bWasSucces
 
     if (IsValid(MainMenuWidget.Get()))
     {
-        MainMenuWidget->SetSteamJoinBusy(true, FText::FromString(TEXT("Steam 로비에 연결하는 중입니다...")));
+        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "ConnectingSteamLobby", "Steam 로비에 연결하는 중입니다..."));
     }
 
     // 접속 주소는 Online Subsystem이 해석한 문자열 그대로 사용한다.
@@ -715,7 +722,7 @@ void ADMFrontendPlayerController::StartSteamJoinFailureCleanup(const FString& Fa
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetSteamJoinBusy(
-                false, FText::FromString(TEXT("접속 실패 후 세션을 정리하지 못했습니다."))
+                false, NSLOCTEXT("DMFrontend", "JoinCleanupFailed", "접속 실패 후 세션을 정리하지 못했습니다.")
             );
         }
         return;
@@ -729,7 +736,7 @@ void ADMFrontendPlayerController::StartSteamJoinFailureCleanup(const FString& Fa
 
     if (IsValid(MainMenuWidget.Get()))
     {
-        MainMenuWidget->SetSteamJoinBusy(true, FText::FromString(TEXT("참가 실패. 로컬 세션을 정리하고 있습니다...")));
+        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "CleaningFailedJoin", "참가 실패. 로컬 세션을 정리하고 있습니다..."));
     }
 
     const bool bStarted = Session->DestroyLobbySession();
@@ -742,7 +749,7 @@ void ADMFrontendPlayerController::StartSteamJoinFailureCleanup(const FString& Fa
         if (IsValid(MainMenuWidget.Get()))
         {
             MainMenuWidget->SetSteamJoinBusy(
-                false, FText::FromString(TEXT("세션 정리에 실패했습니다. 게임 재시작이 필요할 수 있습니다."))
+                false, NSLOCTEXT("DMFrontend", "SessionCleanupFailed", "세션 정리에 실패했습니다. 게임 재시작이 필요할 수 있습니다.")
             );
         }
     }

@@ -10,6 +10,7 @@ class ADMRelicManager;
 class UBoxComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+class UNiagaraComponent;
 
 /**
  * 개별 유물의 서버 권위 상태와 월드 표현을 담당한다.
@@ -25,6 +26,9 @@ class DONTMELT_API ADMRelic : public AActor, public IDMInteractable
 
 public:
     ADMRelic();
+
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     virtual bool
     IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const override;
@@ -86,6 +90,12 @@ private:
         VisibleAnywhere, BlueprintReadOnly, Category = "DM|Relic|Components", meta = (AllowPrivateAccess = "true")
     )
     TObjectPtr<UBoxComponent> InteractionBounds;
+
+    /** 공개 상태에서만 활성화되는 BP 편집 가능 Niagara 마커. */
+    UPROPERTY(
+        VisibleAnywhere, BlueprintReadOnly, Category = "DM|Relic|Components", meta = (AllowPrivateAccess = "true")
+    )
+    TObjectPtr<UNiagaraComponent> PublicRelicMarker;
 
     /** Match 내부에서 Relic을 구분하는 ID. */
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "DM|Relic|State", meta = (AllowPrivateAccess = "true"))

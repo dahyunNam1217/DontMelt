@@ -30,11 +30,11 @@ public:
     /** 공격 시 일회성 이펙트를 재생한다. */
     void PlayAttackEffect();
 
-    /** NPC 놀람 시 일회성 느낌표를 재생한다. */
-    void PlayNPCAlertEffect();
-
     /** 방어 시 일회성 이펙트를 재생한다. */
     void PlayDefenseEffect();
+
+    /** 방어 종료·사망·제거 시 활성 방어 이펙트와 보조 타이머를 정리한다. */
+    void StopDefenseEffect();
 
     /** 복제된 스턴 표현 상태에 따라 별 이펙트를 시작하거나 종료한다. */
     void SetStunEffectActive(bool bActive);
@@ -57,17 +57,12 @@ private:
 
     void SpawnOneShot(UNiagaraSystem* Effect, FName SocketName, FVector LocalOffset, FRotator LocalRotation) const;
 
-    void StopDefenseEffect();
-
 #pragma endregion
 
 #pragma region VFX Configuration
 
     UPROPERTY(EditDefaultsOnly, Category = "DontMelt|VFX|Combat")
     TObjectPtr<UNiagaraSystem> AttackEffect = nullptr;
-
-    UPROPERTY(EditDefaultsOnly, Category = "DontMelt|VFX|NPC")
-    TObjectPtr<UNiagaraSystem> NPCAlertEffect = nullptr;
 
     UPROPERTY(EditDefaultsOnly, Category = "DontMelt|VFX|Status")
     TObjectPtr<UNiagaraSystem> StunEffect = nullptr;
@@ -81,12 +76,6 @@ private:
 
     UPROPERTY(EditDefaultsOnly, Category = "DontMelt|VFX|Offset")
     FRotator AttackLocalRotation = FRotator::ZeroRotator;
-
-    UPROPERTY(EditDefaultsOnly, Category = "DontMelt|VFX|Offset")
-    FVector AlertLocalOffset = FVector::ZeroVector;
-
-    UPROPERTY(EditDefaultsOnly, Category = "DontMelt|VFX|Offset")
-    FRotator AlertLocalRotation = FRotator::ZeroRotator;
 
     UPROPERTY(EditDefaultsOnly, Category = "DontMelt|VFX|Offset")
     FVector DefenseLocalOffset = FVector::ZeroVector;
@@ -111,6 +100,8 @@ private:
     /** 생성된 지속형 스턴 이펙트를 종료하기 위한 로컬 참조. */
     TWeakObjectPtr<UNiagaraComponent> ActiveStunEffect;
     TWeakObjectPtr<UNiagaraComponent> ActiveDefenseEffect;
+    bool bStunEffectSpawnedDynamically = false;
+    bool bDefenseEffectSpawnedDynamically = false;
     FTimerHandle DefenseEffectEndTimer;
 
 #pragma endregion

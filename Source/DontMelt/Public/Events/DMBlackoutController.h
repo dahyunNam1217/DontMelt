@@ -8,8 +8,11 @@
 #include "DMBlackoutController.generated.h"
 
 class ADMMatchGameState;
+class ADMNPCCharacter;
+class AActor;
 
 class ULightComponentBase;
+class UMaterialInterface;
 class UPointLightComponent;
 
 /**
@@ -97,6 +100,16 @@ private:
 
     void ResetBlackoutPresentation();
 
+    void BeginNPCBlackoutPresentation();
+
+    void UpdateNPCBlackoutFade();
+
+    void RestoreNPCBlackoutPresentation();
+
+    void HandleActorSpawned(AActor* SpawnedActor);
+
+    void ApplyBlackoutToNPC(ADMNPCCharacter* NPCCharacter);
+
 #pragma endregion
 
 #pragma region Local Visibility Light
@@ -172,6 +185,26 @@ private:
     UPROPERTY(EditAnywhere, Category = "DM|Blackout|Local Light")
     FVector LocalVisibilityLightOffset = FVector(0.0f, 0.0f, 40.0f);
 
+    /** NPC Skeletal Mesh 슬롯에 적용할 정전 전용 Material 또는 Material Instance. */
+    UPROPERTY(EditAnywhere, Category = "DM|Blackout|NPC")
+    TObjectPtr<UMaterialInterface> NPCBlackoutMaterial = nullptr;
+
+    /** 정전 Material이 제공해야 하는 0~1 Scalar Parameter 이름. */
+    UPROPERTY(EditAnywhere, Category = "DM|Blackout|NPC")
+    FName NPCBlackoutFadeParameterName = TEXT("BlackoutFade");
+
+    /** 정전 시작 시 Fade 값이 0에서 1까지 진행되는 시간. */
+    UPROPERTY(EditAnywhere, Category = "DM|Blackout|NPC", meta = (ClampMin = "0.0"))
+    float NPCBlackoutFadeDuration = 2.0f;
+
+    /** Fade 진행 중에만 사용하는 로컬 갱신 간격. */
+    UPROPERTY(EditAnywhere, Category = "DM|Blackout|NPC", meta = (ClampMin = "0.016"))
+    float NPCBlackoutFadeUpdateInterval = 0.05f;
+
+    /** 비어 있으면 모든 Material Slot에 적용한다. */
+    UPROPERTY(EditAnywhere, Category = "DM|Blackout|NPC")
+    TArray<int32> NPCBlackoutMaterialSlots;
+
 #pragma endregion
 
 #pragma region Runtime State
@@ -203,6 +236,12 @@ private:
     FTimerHandle BlackoutStartTimerHandle;
 
     FTimerHandle BlackoutEndTimerHandle;
+
+    FTimerHandle NPCBlackoutFadeTimerHandle;
+
+    TArray<TWeakObjectPtr<ADMNPCCharacter>> BlackoutNPCs;
+
+    FDelegateHandle ActorSpawnedDelegateHandle;
 
 #pragma endregion
 };

@@ -55,6 +55,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DontMelt|Input|Actions")
     TObjectPtr<UInputAction> SprintAction;
 
+    // 누르고 있는 동안 상세 조작 안내를 표시한다. 미설정 시 다른 입력은 그대로 동작한다.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DontMelt|Input|Actions")
+    TObjectPtr<UInputAction> ShowControlsAction;
+
     // Combat
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DontMelt|Input|Actions")
     TObjectPtr<UInputAction> AttackAction;
@@ -72,6 +76,12 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DontMelt|Input|Actions")
     TObjectPtr<UInputAction> SkillVisionDistortAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DontMelt|Input|Actions")
+    TObjectPtr<UInputAction> SkillSizeAmplificationAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DontMelt|Input|Actions")
+    TObjectPtr<UInputAction> SkillSlowMovementAction;
 
     // Skill Targeting
 

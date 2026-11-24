@@ -10,6 +10,7 @@
 
 class UCameraComponent;
 class USpringArmComponent;
+class UDMSizeAmplificationComponent;
 
 class UDMCombatComponent;
 class UDMInteractionComponent;
@@ -23,6 +24,7 @@ class UAnimMontage;
 class UAudioComponent;
 class USoundBase;
 class USoundAttenuation;
+class UNiagaraComponent;
 
 struct FInputActionValue;
 struct FDMQuestActionEvent;
@@ -45,6 +47,9 @@ class DONTMELT_API ADMPlayerCharacter : public ADMJellyCharacterBase
 
 public:
     ADMPlayerCharacter(const FObjectInitializer& ObjectInitializer);
+
+    virtual UNiagaraComponent* GetAttackVFXComponent() const override { return AttackVFXComponent; }
+    virtual UNiagaraComponent* GetDefenseVFXComponent() const override { return DefenseVFXComponent; }
 
 #pragma region Quest Event Bridge Public
 
@@ -71,6 +76,14 @@ public:
     }
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    UDMSizeAmplificationComponent* GetSizeAmplificationComponent() const
+    {
+        return SizeAmplificationComponent;
+    }
+
+    /** 로컬 카메라의 높이만 현재 크기 배율에 맞춰 갱신한다. */
+    void ApplySizeAmplificationCameraScale(float Scale);
 
 #pragma endregion
 
@@ -177,6 +190,9 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     virtual void OnJumped_Implementation() override;
+
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastPlayJumpSound();
 
     virtual void PawnClientRestart() override;
 
@@ -325,6 +341,17 @@ private:
     )
     TObjectPtr<UDMPoseComponent> PoseComponent;
 
+    UPROPERTY(
+        VisibleAnywhere, BlueprintReadOnly, Category = "DontMelt|Components", meta = (AllowPrivateAccess = "true")
+    )
+    TObjectPtr<UDMSizeAmplificationComponent> SizeAmplificationComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DontMelt|VFX", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UNiagaraComponent> AttackVFXComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DontMelt|VFX", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UNiagaraComponent> DefenseVFXComponent;
+
 #pragma endregion
 
 #pragma region Configuration
@@ -368,6 +395,9 @@ private:
 
     // 로컬 Input Context 상태이며 Gameplay Pose 상태의 원본이 아니다.
     bool bIsPoseInputMode = false;
+
+    /** Gameplay 원본이 아닌 소유 클라이언트 카메라 표현 배율. */
+    float SizeAmplificationCameraScale = 1.0f;
 
     // 로컬 감정표현 입력 유지 상태. Gameplay Emote 상태의 원본은 StateComponent다.
     bool bIsEmoteInputHeld = false;

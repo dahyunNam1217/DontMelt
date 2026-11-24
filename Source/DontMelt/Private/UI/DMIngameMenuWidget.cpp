@@ -2,6 +2,7 @@
 #include "UI/DMIngameMenuWidget.h"
 
 #include "UI/DMSettingsWidget.h"
+#include "Core/DMGameInstance.h"
 #include "Framework/Match/DMMatchPlayerController.h"
 
 #include "Components/Button.h"
@@ -14,6 +15,11 @@
 void UDMIngameMenuWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
+
+    if (UDMGameInstance* GameInstance = Cast<UDMGameInstance>(GetGameInstance()))
+    {
+        GameInstance->BindCommonUIClickSound(this);
+    }
 
     if (!ensure(
             MenuPanel && ConfirmLeavePanel && SettingsPanel && BTN_Resume && BTN_Settings && BTN_LeaveMatch

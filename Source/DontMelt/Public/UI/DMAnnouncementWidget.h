@@ -46,6 +46,10 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "DM|UI|Announcement", meta = (ClampMin = "0.1"))
     float MessageDisplayDuration = 2.5f;
 
+    /** 제한시간 내 퀘스트 성공 알림 표시 시간 */
+    UPROPERTY(EditDefaultsOnly, Category = "DM|UI|Announcement", meta = (ClampMin = "0.1"))
+    float QuestSuccessMessageDuration = 3.0f;
+
 #pragma endregion
 
 #pragma region Widget References
@@ -71,6 +75,7 @@ private:
 #pragma region Presentation
 
     void ShowMessage(const FText& Message);
+    void ShowMessage(const FText& Message, float DisplayDuration);
     void HideMessage();
 
     void StartEventWatchIfNeeded();

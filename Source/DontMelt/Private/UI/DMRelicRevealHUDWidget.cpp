@@ -228,7 +228,12 @@ void UDMRelicRevealHUDWidget::RefreshRemainingTime()
 
     if (IsValid(TXT_RevealTime))
     {
-        TXT_RevealTime->SetText(FText::FromString(FString::Printf(TEXT("%.1f초"), Remaining)));
+        const FNumberFormattingOptions OneDecimal = FNumberFormattingOptions()
+            .SetMaximumFractionalDigits(1).SetMinimumFractionalDigits(1);
+        TXT_RevealTime->SetText(FText::Format(
+            NSLOCTEXT("DMRelicRevealHUD", "SecondsFormat", "{0}초"),
+            FText::AsNumber(Remaining, &OneDecimal)
+        ));
     }
 }
 

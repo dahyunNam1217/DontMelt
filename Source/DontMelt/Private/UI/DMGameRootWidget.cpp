@@ -135,6 +135,7 @@ void UDMGameRootWidget::RebindDataSources(
 
             // 동일 PlayerState여도 스킬 데이터 준비 여부를 재확인한다.
             GameplayHUD->SetSkillPlayerState(InPlayerState);
+            GameplayHUD->SetAuxiliaryHUDSources(InPlayerState, InPawn);
         }
 
         // 랜덤 이벤트와 본인의 입력 반전 상태를 함께 연결한다.
@@ -214,6 +215,12 @@ void UDMGameRootWidget::RebindDataSources(
     BoundGameState = InGameState;
     BoundPlayerState = InPlayerState;
     BoundPawn = InPawn;
+
+    if (IsValid(InController) && IsValid(InGameState))
+    {
+        InController->RefreshMatchPhaseAudio(InGameState->GetPhaseState());
+        InController->RefreshMatchResultAudio(InGameState->GetMatchResult());
+    }
 
     // 경기 결과는 GameState, 개인 승패 비교는 PlayerState를 사용한다.
     if (IsValid(MatchResultWidget))
@@ -296,6 +303,8 @@ void UDMGameRootWidget::RebindDataSources(
 
         // 기존 유물 HUD를 현재 Controller와 Pawn에 다시 연결한다.
         GameplayHUD->SetRelicHUDSources(InController, InPawn);
+
+        GameplayHUD->SetAuxiliaryHUDSources(InPlayerState, InPawn);
     }
 
     InController->OnSpectatorInformationRestrictionChanged().AddUObject(
@@ -446,6 +455,9 @@ void UDMGameRootWidget::ShutdownDataSources()
 
         // 이전 Pawn의 상호작용·유물 운반 Delegate를 해제한다.
         GameplayHUD->SetRelicHUDSources(nullptr, nullptr);
+
+        GameplayHUD->SetAuxiliaryPresentation(false, false, false);
+        GameplayHUD->SetAuxiliaryHUDSources(nullptr, nullptr);
     }
 
     if (ADMMatchPlayerController* Controller = BoundController.Get())
@@ -523,6 +535,21 @@ void UDMGameRootWidget::RefreshRootVisibility()
     if (IsValid(GameplayHUD))
     {
         GameplayHUD->SetPresentationActive(bShowGameplay);
+
+        const bool bPlaying = IsValid(GameState) && GameState->GetCurrentPhase() == EDMMatchPhase::Playing;
+        const bool bControlPhase = IsValid(GameState)
+            && (GameState->GetCurrentPhase() == EDMMatchPhase::Playing
+                || GameState->GetCurrentPhase() == EDMMatchPhase::Overtime);
+        const bool bControlsAllowed = bControlPhase && bShowGameplay && IsValid(Controller)
+            && !Controller->IsIngameMenuOpen() && !Controller->IsChestInteractionOpen()
+            && !Controller->IsSkillTargetingActive();
+
+        // Overtime 계열은 명시 정책이 확정되기 전까지 미니맵을 표시하지 않는다.
+        GameplayHUD->SetAuxiliaryPresentation(
+            bPlaying && bShowGameplay,
+            bControlsAllowed,
+            bControlsAllowed && Controller->IsControlsHelpHeld()
+        );
     }
 
     // 상태이상 표시는 본인이 생존하여 Gameplay 중일 때만 활성화한다.
@@ -588,6 +615,11 @@ void UDMGameRootWidget::RefreshRootVisibility()
     if (IsValid(MatchResultWidget))
     {
         MatchResultWidget->SetPresentationActive(bMatchTerminal);
+    }
+
+    if (bMatchTerminal && IsValid(Controller) && IsValid(GameState))
+    {
+        Controller->RefreshMatchResultAudio(GameState->GetMatchResult());
     }
 
     // 서버가 확정한 생명주기와 별도로,
@@ -816,12 +848,17 @@ void UDMGameRootWidget::HandleSkillTargetingStateChanged(
 }
 
 void UDMGameRootWidget::HandlePhaseStateChanged(
-    ADMMatchGameState* Source, FDMMatchPhaseState /*NewState*/
+    ADMMatchGameState* Source, FDMMatchPhaseState NewState
 )
 {
     if (Source != BoundGameState.Get())
     {
         return;
+    }
+
+    if (ADMMatchPlayerController* Controller = BoundController.Get())
+    {
+        Controller->RefreshMatchPhaseAudio(NewState);
     }
 
     RefreshRootVisibility();
@@ -840,7 +877,6 @@ void UDMGameRootWidget::HandleLifeStateChanged(
     {
         return;
     }
-
     RefreshRootVisibility();
 }
 

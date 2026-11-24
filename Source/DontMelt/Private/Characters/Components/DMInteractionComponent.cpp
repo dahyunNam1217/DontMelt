@@ -633,7 +633,7 @@ void UDMInteractionComponent::ServerRequestInteraction_Implementation(
             return;
         }
 
-        MatchPlayerController->ClientOpenChestInteraction(Chest, BaseSlot, RegisteredRelicCount);
+        MatchPlayerController->OpenChestInteractionFromServer(Chest, BaseSlot, RegisteredRelicCount);
 
         /*
          * InspectChest는 Hold Interaction이 아니므로
@@ -1059,6 +1059,14 @@ void UDMInteractionComponent::ServerHandleInteractionCompleted()
             return;
         }
 
+        if (ADMMatchGameState* MatchGameState =
+                OwnerCharacter->GetWorld()->GetGameState<ADMMatchGameState>())
+        {
+            MatchGameState->BroadcastWorldAudioEvent(
+                EDMWorldAudioEvent::RelicPickup, TargetRelic->GetActorLocation()
+            );
+        }
+
         UE_LOG(
             LogDMInteraction,
             Log,
@@ -1092,6 +1100,14 @@ void UDMInteractionComponent::ServerHandleInteractionCompleted()
             return;
         }
 
+        if (ADMMatchGameState* MatchGameState =
+                OwnerCharacter->GetWorld()->GetGameState<ADMMatchGameState>())
+        {
+            MatchGameState->BroadcastWorldAudioEvent(
+                EDMWorldAudioEvent::RelicPickup, Chest->GetActorLocation()
+            );
+        }
+
         UE_LOG(
             LogDMInteraction,
             Log,
@@ -1122,6 +1138,11 @@ void UDMInteractionComponent::ServerHandleInteractionCompleted()
             EndServerInteractionAsFailure(FailureReason);
 
             return;
+        }
+
+        if (ADMMatchPlayerController* Controller = OwnerCharacter->GetController<ADMMatchPlayerController>())
+        {
+            Controller->ClientPlayRelicDepositSound();
         }
 
         UE_LOG(

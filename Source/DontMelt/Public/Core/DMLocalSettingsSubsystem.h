@@ -58,6 +58,15 @@ public:
 
 #pragma endregion
 
+#pragma region Localization
+
+    FString GetLanguageCode() const;
+
+    /** 지원 언어를 적용한다. Gameplay 또는 Network 상태는 변경하지 않는다. */
+    bool SetLanguageCode(const FString& InLanguageCode);
+
+#pragma endregion
+
 private:
 #pragma region Data
 

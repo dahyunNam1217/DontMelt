@@ -6,6 +6,8 @@
 #include "Characters/Components/DMInteractionComponent.h"
 
 #include "Framework/Match/DMMatchPlayerState.h"
+#include "Framework/Match/DMMatchPlayerController.h"
+#include "Framework/Match/DMMatchGameState.h"
 
 #include "Relic/DMBaseZone.h"
 #include "Relic/DMRelic.h"
@@ -2447,6 +2449,14 @@ bool ADMRelicManager::TryDropCarriedRelic(
      * World에 다시 보이도록 한다.
      */
     Relic->SetWorldState(EDMRelicWorldState::Dropped);
+
+    if (ADMMatchGameState* MatchGameState =
+            GetWorld() ? GetWorld()->GetGameState<ADMMatchGameState>() : nullptr)
+    {
+        MatchGameState->BroadcastWorldAudioEvent(
+            EDMWorldAudioEvent::RelicDrop, FinalDropTransform.GetLocation()
+        );
+    }
 
     UE_LOG(
         LogDMRelicManager,

@@ -25,24 +25,32 @@ bool UDMSkillSetDataAsset::ValidateDefinitionSet(FString& OutFailureReason) cons
 {
     OutFailureReason.Reset();
 
-    constexpr int32 ExpectedSkillCount = 3;
+    constexpr int32 LegacySkillCount = 3;
+    constexpr int32 FinalSkillCount = 5;
 
-    if (SkillDefinitions.Num() != ExpectedSkillCount)
+    if (SkillDefinitions.Num() != LegacySkillCount && SkillDefinitions.Num() != FinalSkillCount)
     {
         OutFailureReason = FString::Printf(
-            TEXT("Skill count mismatch. Expected=%d, Actual=%d"), ExpectedSkillCount, SkillDefinitions.Num()
+            TEXT("Skill count mismatch. Expected legacy=%d or final=%d, Actual=%d"),
+            LegacySkillCount,
+            FinalSkillCount,
+            SkillDefinitions.Num()
         );
 
         return false;
     }
 
-    TSet<FGameplayTag> RequiredSkillTags;
+    TSet<FGameplayTag> AllowedSkillTags;
 
-    RequiredSkillTags.Add(DMGameplayTags::Skill_Invisibility);
+    AllowedSkillTags.Add(DMGameplayTags::Skill_Invisibility);
 
-    RequiredSkillTags.Add(DMGameplayTags::Skill_FootstepAmplify);
+    AllowedSkillTags.Add(DMGameplayTags::Skill_FootstepAmplify);
 
-    RequiredSkillTags.Add(DMGameplayTags::Skill_VisionDistort);
+    AllowedSkillTags.Add(DMGameplayTags::Skill_VisionDistort);
+
+    AllowedSkillTags.Add(DMGameplayTags::Skill_SizeAmplification);
+
+    AllowedSkillTags.Add(DMGameplayTags::Skill_SlowMovement);
 
     TSet<FGameplayTag> FoundSkillTags;
 
@@ -55,7 +63,7 @@ bool UDMSkillSetDataAsset::ValidateDefinitionSet(FString& OutFailureReason) cons
             return false;
         }
 
-        if (!RequiredSkillTags.Contains(Definition.SkillTag))
+        if (!AllowedSkillTags.Contains(Definition.SkillTag))
         {
             OutFailureReason = FString::Printf(TEXT("Unexpected SkillTag=%s"), *Definition.SkillTag.ToString());
 
@@ -99,7 +107,9 @@ bool UDMSkillSetDataAsset::ValidateDefinitionSet(FString& OutFailureReason) cons
         }
 
         if ((Definition.SkillTag == DMGameplayTags::Skill_FootstepAmplify
-             || Definition.SkillTag == DMGameplayTags::Skill_VisionDistort)
+             || Definition.SkillTag == DMGameplayTags::Skill_VisionDistort
+             || Definition.SkillTag == DMGameplayTags::Skill_SizeAmplification
+             || Definition.SkillTag == DMGameplayTags::Skill_SlowMovement)
             && !Definition.bRequiresTargetSelection)
         {
             OutFailureReason = FString::Printf(
@@ -112,13 +122,39 @@ bool UDMSkillSetDataAsset::ValidateDefinitionSet(FString& OutFailureReason) cons
         FoundSkillTags.Add(Definition.SkillTag);
     }
 
-    for (const FGameplayTag& RequiredTag : RequiredSkillTags)
+    const FGameplayTag RequiredLegacyTags[] = {
+        DMGameplayTags::Skill_Invisibility,
+        DMGameplayTags::Skill_FootstepAmplify,
+        DMGameplayTags::Skill_VisionDistort
+    };
+
+    for (const FGameplayTag& RequiredTag : RequiredLegacyTags)
     {
         if (!FoundSkillTags.Contains(RequiredTag))
         {
             OutFailureReason = FString::Printf(TEXT("Required Skill is missing. Skill=%s"), *RequiredTag.ToString());
 
             return false;
+        }
+    }
+
+    if (SkillDefinitions.Num() == FinalSkillCount)
+    {
+        const FGameplayTag RequiredNewTags[] = {
+            DMGameplayTags::Skill_SizeAmplification,
+            DMGameplayTags::Skill_SlowMovement
+        };
+
+        for (const FGameplayTag& RequiredTag : RequiredNewTags)
+        {
+            if (!FoundSkillTags.Contains(RequiredTag))
+            {
+                OutFailureReason = FString::Printf(
+                    TEXT("Required final Skill is missing. Skill=%s"), *RequiredTag.ToString()
+                );
+
+                return false;
+            }
         }
     }
 

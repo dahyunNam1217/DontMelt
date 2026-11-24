@@ -8,7 +8,9 @@
 #include "Characters/Components/DMPoseComponent.h"
 #include "Characters/Components/DMCharacterStateComponent.h"
 #include "Characters/Components/DMCharacterMovementComponent.h"
+#include "Characters/Components/DMCharacterAudioComponent.h"
 #include "Characters/Components/DMJellyPhysicsComponent.h"
+#include "Characters/Components/DMSizeAmplificationComponent.h"
 #include "Input/DMInputConfigDataAsset.h"
 #include "Animation/AnimMontage.h"
 #include "Relic/DMRelicChest.h"
@@ -34,6 +36,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "InputActionValue.h"
 #include "Math/RotationMatrix.h"
+#include "NiagaraComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDMPlayerCharacter, Log, All);
 
@@ -60,6 +63,17 @@ ADMPlayerCharacter::ADMPlayerCharacter(const FObjectInitializer& ObjectInitializ
     InteractionComponent = CreateDefaultSubobject<UDMInteractionComponent>(TEXT("InteractionComponent"));
 
     PoseComponent = CreateDefaultSubobject<UDMPoseComponent>(TEXT("PoseComponent"));
+
+    SizeAmplificationComponent =
+        CreateDefaultSubobject<UDMSizeAmplificationComponent>(TEXT("SizeAmplificationComponent"));
+
+    AttackVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("AttackVFXComponent"));
+    AttackVFXComponent->SetupAttachment(GetMesh(), TEXT("FX_Attack_Front"));
+    AttackVFXComponent->SetAutoActivate(false);
+
+    DefenseVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("DefenseVFXComponent"));
+    DefenseVFXComponent->SetupAttachment(GetMesh(), TEXT("FX_Defense_Back"));
+    DefenseVFXComponent->SetAutoActivate(false);
 
     // 사이렌 전용 컴포넌트를 하나만 만들고, 처음에는 재생하지 않는다.
     QuestSirenAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("QuestSirenAudioComponent"));
@@ -142,12 +156,36 @@ void ADMPlayerCharacter::OnJumped_Implementation()
 {
     Super::OnJumped_Implementation();
 
+    if (IsLocallyControlled())
+    {
+        if (UDMCharacterAudioComponent* AudioComponent = GetCharacterAudioComponent())
+        {
+            AudioComponent->PlayJumpSound();
+        }
+    }
+
     if (!HasAuthority())
     {
         return;
     }
 
+    MulticastPlayJumpSound();
+
     BroadcastQuestActionEvent(DMGameplayTags::QuestEvent_Jump);
+}
+
+void ADMPlayerCharacter::MulticastPlayJumpSound_Implementation()
+{
+    // 소유자는 예측된 OnJumped에서 이미 재생했으므로 원격 표현만 보완한다.
+    if (IsLocallyControlled())
+    {
+        return;
+    }
+
+    if (UDMCharacterAudioComponent* AudioComponent = GetCharacterAudioComponent())
+    {
+        AudioComponent->PlayJumpSound();
+    }
 }
 
 void ADMPlayerCharacter::PawnClientRestart()
@@ -397,6 +435,23 @@ void ADMPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 
     BindPoseAndEmoteInput(EnhancedInputComponent);
 
+    ADMMatchPlayerController* MatchPlayerController = Cast<ADMMatchPlayerController>(GetController());
+    if (IsValid(MatchPlayerController) && InputConfig->ShowControlsAction != nullptr)
+    {
+        EnhancedInputComponent->BindAction(
+            InputConfig->ShowControlsAction, ETriggerEvent::Started,
+            MatchPlayerController, &ADMMatchPlayerController::InputShowControlsStarted
+        );
+        EnhancedInputComponent->BindAction(
+            InputConfig->ShowControlsAction, ETriggerEvent::Completed,
+            MatchPlayerController, &ADMMatchPlayerController::InputShowControlsStopped
+        );
+        EnhancedInputComponent->BindAction(
+            InputConfig->ShowControlsAction, ETriggerEvent::Canceled,
+            MatchPlayerController, &ADMMatchPlayerController::InputShowControlsStopped
+        );
+    }
+
     // 스킬 입력은 MatchPlayerController가 처리하므로 마지막에 바인딩한다.
     BindSkillInput(EnhancedInputComponent);
 }
@@ -629,6 +684,26 @@ void ADMPlayerCharacter::BindSkillInput(UEnhancedInputComponent* EnhancedInputCo
             ETriggerEvent::Started,
             MatchPlayerController,
             &ADMMatchPlayerController::InputSkillVisionDistortStarted
+        );
+    }
+
+    if (InputConfig->SkillSlowMovementAction != nullptr)
+    {
+        EnhancedInputComponent->BindAction(
+            InputConfig->SkillSlowMovementAction,
+            ETriggerEvent::Started,
+            MatchPlayerController,
+            &ADMMatchPlayerController::InputSkillSlowMovementStarted
+        );
+    }
+
+    if (InputConfig->SkillSizeAmplificationAction != nullptr)
+    {
+        EnhancedInputComponent->BindAction(
+            InputConfig->SkillSizeAmplificationAction,
+            ETriggerEvent::Started,
+            MatchPlayerController,
+            &ADMMatchPlayerController::InputSkillSizeAmplificationStarted
         );
     }
 
@@ -1297,7 +1372,7 @@ void ADMPlayerCharacter::ApplyLocalCameraView()
     {
         CameraBoom->TargetArmLength = 0.0f;
 
-        CameraBoom->TargetOffset = FVector(0.0f, 0.0f, BaseEyeHeight);
+        CameraBoom->TargetOffset = FVector(0.0f, 0.0f, BaseEyeHeight * SizeAmplificationCameraScale);
 
         CameraBoom->SocketOffset = FVector::ZeroVector;
 
@@ -1312,6 +1387,7 @@ void ADMPlayerCharacter::ApplyLocalCameraView()
     CameraBoom->TargetArmLength = ThirdPersonArmLength;
 
     CameraBoom->TargetOffset = ThirdPersonTargetOffset;
+    CameraBoom->TargetOffset.Z *= SizeAmplificationCameraScale;
 
     CameraBoom->SocketOffset = ThirdPersonSocketOffset;
 
@@ -1319,6 +1395,12 @@ void ADMPlayerCharacter::ApplyLocalCameraView()
     {
         GetMesh()->SetOwnerNoSee(false);
     }
+}
+
+void ADMPlayerCharacter::ApplySizeAmplificationCameraScale(const float Scale)
+{
+    SizeAmplificationCameraScale = FMath::Max(1.0f, Scale);
+    ApplyLocalCameraView();
 }
 
 void ADMPlayerCharacter::ApplyViewRotationPolicy()

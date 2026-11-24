@@ -1,4 +1,5 @@
 #include "UI/DMPreMatchTutorialWidget.h"
+#include "Core/DMGameInstance.h"
 
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -22,16 +23,16 @@ UDMPreMatchTutorialWidget::UDMPreMatchTutorialWidget(const FObjectInitializer& O
 {
     // Blueprint Class Defaults에서 페이지를 원하는 만큼 교체할 수 있다.
     TutorialPageTitles = {
-        FText::FromString(TEXT("게임 목표")),
-        FText::FromString(TEXT("유물 등록")),
-        FText::FromString(TEXT("전투와 위장")),
-        FText::FromString(TEXT("스킬과 이벤트"))
+        NSLOCTEXT("DMTutorial", "GoalTitle", "게임 목표"),
+        NSLOCTEXT("DMTutorial", "RelicTitle", "유물 등록"),
+        NSLOCTEXT("DMTutorial", "CombatTitle", "전투와 위장"),
+        NSLOCTEXT("DMTutorial", "SkillTitle", "스킬과 이벤트")
     };
     TutorialPageDescriptions = {
-        FText::FromString(TEXT("NPC 사이에서 유물을 모아 자신의 상자에 등록하세요.")),
-        FText::FromString(TEXT("F로 상자를 열고 스페이스바를 길게 눌러 등록합니다. Q는 유물 내려놓기입니다.")),
-        FText::FromString(TEXT("NPC와 플레이어의 외형은 같습니다. 오인공격에는 불이익이 있습니다.")),
-        FText::FromString(TEXT("스킬과 랜덤 이벤트를 활용하세요. 튜토리얼 완료 후 전원이 준비되면 시작합니다."))
+        NSLOCTEXT("DMTutorial", "GoalDescription", "NPC 사이에서 유물을 모아 자신의 상자에 등록하세요."),
+        NSLOCTEXT("DMTutorial", "RelicDescription", "F로 상자를 열고 스페이스바를 길게 눌러 등록합니다. Q는 유물 내려놓기입니다."),
+        NSLOCTEXT("DMTutorial", "CombatDescription", "NPC와 플레이어의 외형은 같습니다. 오인공격에는 불이익이 있습니다."),
+        NSLOCTEXT("DMTutorial", "SkillDescription", "스킬과 랜덤 이벤트를 활용하세요. 튜토리얼 완료 후 전원이 준비되면 시작합니다.")
     };
 }
 
@@ -44,6 +45,11 @@ bool UDMPreMatchTutorialWidget::HasRequiredBindings() const
 void UDMPreMatchTutorialWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
+
+    if (UDMGameInstance* GameInstance = Cast<UDMGameInstance>(GetGameInstance()))
+    {
+        GameInstance->BindCommonUIClickSound(this);
+    }
     if (IsValid(BTN_Previous)) BTN_Previous->OnClicked.AddDynamic(this, &ThisClass::HandlePreviousClicked);
     if (IsValid(BTN_Next)) BTN_Next->OnClicked.AddDynamic(this, &ThisClass::HandleNextClicked);
     if (IsValid(BTN_Skip)) BTN_Skip->OnClicked.AddDynamic(this, &ThisClass::HandleSkipClicked);
@@ -64,10 +70,13 @@ void UDMPreMatchTutorialWidget::RefreshPage()
     PageIndex = FMath::Clamp(PageIndex, 0, Count - 1);
     if (IsValid(TXT_PageTitle)) TXT_PageTitle->SetText(TutorialPageTitles[PageIndex]);
     if (IsValid(TXT_PageDescription)) TXT_PageDescription->SetText(TutorialPageDescriptions[PageIndex]);
-    if (IsValid(TXT_PageIndex)) TXT_PageIndex->SetText(FText::FromString(
-        FString::Printf(TEXT("%d / %d"), PageIndex + 1, Count)));
-    if (IsValid(TXT_NextButton)) TXT_NextButton->SetText(FText::FromString(
-        PageIndex == Count - 1 ? TEXT("게임 시작") : TEXT("다음 페이지")));
+    if (IsValid(TXT_PageIndex)) TXT_PageIndex->SetText(FText::Format(
+        NSLOCTEXT("DMTutorial", "PageIndexFormat", "{0} / {1}"),
+        FText::AsNumber(PageIndex + 1), FText::AsNumber(Count)));
+    if (IsValid(TXT_NextButton)) TXT_NextButton->SetText(
+        PageIndex == Count - 1
+            ? NSLOCTEXT("DMTutorial", "StartGame", "게임 시작")
+            : NSLOCTEXT("DMTutorial", "NextPage", "다음 페이지"));
     if (IsValid(BTN_Previous)) BTN_Previous->SetIsEnabled(!bCompleted && PageIndex > 0);
     if (IsValid(BTN_Next)) BTN_Next->SetIsEnabled(!bCompleted);
     if (IsValid(BTN_Skip)) BTN_Skip->SetIsEnabled(!bCompleted);
@@ -104,7 +113,9 @@ void UDMPreMatchTutorialWidget::CompleteTutorial()
 void UDMPreMatchTutorialWidget::MarkWaitingForOtherPlayers()
 {
     CancelSpaceHold(TEXT("Waiting"));
-    const FText WaitingMessage = FText::FromString(TEXT("다른 플레이어의 튜토리얼 완료를 기다리는 중..."));
+    const FText WaitingMessage = NSLOCTEXT(
+        "DMTutorial", "WaitingForOthers", "다른 플레이어의 튜토리얼 완료를 기다리는 중..."
+    );
     if (IsValid(TXT_Waiting))
     {
         TXT_Waiting->SetVisibility(ESlateVisibility::Visible);

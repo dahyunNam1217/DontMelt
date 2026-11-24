@@ -23,6 +23,7 @@ class USoundMix;
 class USoundClass;
 class USoundBase;
 class UAudioComponent;
+class UUserWidget;
 class ADMFrontendPlayerController;
 class UDMOnlineSessionSubsystem;
 
@@ -58,6 +59,13 @@ public:
 #pragma region Local Audio Settings
 
     void ApplyLocalAudioSettings(UWorld* TargetWorld);
+
+    /** C++/Blueprint 주요 버튼이 공유하는 로컬 2D 클릭음 진입점. */
+    UFUNCTION(BlueprintCallable, Category = "DM|Audio|UI")
+    void PlayCommonUIClickSound();
+
+    /** 생성 시점에 존재하는 모든 UButton에 공통 클릭음을 한 번 연결한다. */
+    void BindCommonUIClickSound(UUserWidget* Widget);
 
     /** 로컬 월드의 매치 진행 단계에 따라 기본 음악을 전환한다. */
     void RefreshMusicForWorld(UWorld* TargetWorld);
@@ -372,6 +380,9 @@ private:
 
     UPROPERTY(EditDefaultsOnly, Category = "DM|Settings|Audio")
     TObjectPtr<USoundClass> SettingsMusicClass = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, Category = "DM|Settings|Audio")
+    TObjectPtr<USoundBase> CommonUIClickSound = nullptr;
 
     TWeakObjectPtr<UWorld> AudioAppliedWorld;
 

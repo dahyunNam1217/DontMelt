@@ -24,12 +24,15 @@ class UMaterialInstanceDynamic;
 class ACameraActor;
 class UDMJellyPhysicsComponent;
 class ADMRestrictedSpectatorPawn;
+struct FDMRandomEventRuntimeState;
 class UDMSpectatorPresentationComponent;
 class UDMInputConfigDataAsset;
 class UInputAction;
 class UInputMappingContext;
 class UWorld;
 class UEnhancedInputLocalPlayerSubsystem;
+class USoundBase;
+class USoundAttenuation;
 
 struct FInputActionValue;
 
@@ -43,7 +46,7 @@ DECLARE_MULTICAST_DELEGATE(FDMOnRelicStolenNotification);
  * 인수는 효과가 끝날 예정인 서버 기준 시각이다.
  * 공격자 정보는 포함하지 않는다.
  */
-DECLARE_MULTICAST_DELEGATE_OneParam(FDMOnFootstepAmplifyWarning, double);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FDMOnFootstepAmplifyWarning, double, double);
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FDMOnVisionDistortPresentationChanged, bool);
 
@@ -185,6 +188,15 @@ public:
     // 결과 화면에서는 true를 전달하여 메인 메뉴 패널을 표시한다.
     void LeaveMatchToTitle(bool bOpenMainMenuPanel = false);
 
+    void InputShowControlsStarted();
+
+    void InputShowControlsStopped();
+
+    bool IsControlsHelpHeld() const
+    {
+        return bControlsHelpHeld;
+    }
+
 #pragma endregion
 
 #pragma region Spectator
@@ -321,6 +333,9 @@ public:
     UFUNCTION(Client, Reliable)
     void ClientNotifyRelicStolen();
 
+    UFUNCTION(Client, Reliable)
+    void ClientPlayRelicDepositSound();
+
     FDMOnChestInteractionChanged& OnChestInteractionChanged()
     {
         return ChestInteractionChangedDelegate;
@@ -348,12 +363,37 @@ public:
     // GameState가 결과 보관을 끝낸 뒤 호출한다.
     void NotifyMatchResultCached(const FGuid& ResultId);
 
+    /** 서버 시각 기반 카운트다운·종료 임박 오디오를 한 번만 예약한다. */
+    void RefreshMatchPhaseAudio(const FDMMatchPhaseState& NewPhaseState);
+
+    /** 서버가 확정한 결과 ID별로 승리·패배 사운드를 한 번만 재생한다. */
+    void RefreshMatchResultAudio(const FDMMatchResult& MatchResult);
+
+    /** GameState cosmetic multicast가 전달한 공개 월드 사운드를 로컬에서 재생한다. */
+    void PlayWorldAudioEvent(EDMWorldAudioEvent EventType, const FVector& WorldLocation);
+
+    /** 서버에서 검증된 Chest 열기와 공개 사운드를 한 경로로 확정한다. */
+    void OpenChestInteractionFromServer(ADMRelicChest* Chest, int32 BaseSlot, int32 RegisteredRelicCount);
+
 private:
     UFUNCTION(Server, Reliable)
     void ServerAcknowledgeMatchResult(FGuid ResultId);
 
     // 같은 결과를 중복으로 보내지 않는다.
     FGuid LastAcknowledgedResultId;
+
+    void PlayCountdownTickAudio();
+    void PlayCountdownFinishAudio();
+    void PlayMatchEndWarningAudio();
+    void ClearMatchAudioTimers();
+
+    FTimerHandle CountdownAudioTimerHandles[4];
+    FTimerHandle MatchEndWarningAudioTimerHandle;
+    FTimerHandle MatchEndCountdownAudioTimerHandles[5];
+    double LastScheduledCountdownEndServerTime = 0.0;
+    double LastScheduledMatchEndServerTime = 0.0;
+    EDMMatchPhase LastScheduledMatchEndPhase = EDMMatchPhase::Waiting;
+    FGuid LastPlayedMatchResultAudioId;
 
 #pragma endregion
 
@@ -381,6 +421,10 @@ public:
     void InputSkillFootstepAmplifyStarted();
 
     void InputSkillVisionDistortStarted();
+
+    void InputSkillSizeAmplificationStarted();
+
+    void InputSkillSlowMovementStarted();
 
     void InputTargetRandomStarted();
 
@@ -434,9 +478,12 @@ public:
         ADMMatchPlayerState* TargetPlayerState, bool bActive, double EffectEndServerTime
     );
 
-    /** 피해자에게 경고와 실제 효과의 예정 종료 시각을 전달한다. */
+    /** 피해자에게 경고와 실제 효과의 시작·종료 시각을 전달한다. */
     UFUNCTION(Client, Reliable)
-    void ClientNotifyFootstepAmplifyWarning(double EffectEndServerTime);
+    void ClientNotifyFootstepAmplifyWarning(double EffectStartServerTime, double EffectEndServerTime);
+
+    UFUNCTION(Client, Reliable)
+    void ClientPlayTargetedSkillHitSound(FGameplayTag SkillTag);
 
     /**
      * VisionDistort 대상 Client에만
@@ -480,6 +527,16 @@ public:
         return bIsLocalVisionDistortPresentationActive;
     }
 
+    double GetVisionDistortStartServerTime() const
+    {
+        return LocalVisionDistortStartServerTime;
+    }
+
+    double GetVisionDistortEndServerTime() const
+    {
+        return LocalVisionDistortEndServerTime;
+    }
+
     FDMOnFootstepAmplifyWarning& OnFootstepAmplifyWarning()
     {
         return FootstepAmplifyWarningDelegate;
@@ -503,6 +560,14 @@ public:
      * 현재 열려 있는 Chest를 로컬에서 닫는다.
      */
     void CloseChestInteractionLocal();
+
+    UFUNCTION(Server, Reliable)
+    void ServerCloseChestInteraction(ADMRelicChest* Chest);
+
+    /** HUD 재생성에도 중복되지 않는 로컬 퀘스트 오디오 진입점. */
+    void NotifyQuestStartedAudio(int32 RunId);
+    void NotifyQuestDeadlineWarningAudio(int32 RunId);
+    void NotifyQuestCompletedAudio(int32 RunId);
 
     /**
      * 현재 Client가 Chest Interaction 상태인지 반환한다.
@@ -535,6 +600,11 @@ private:
      * 로컬 Interaction/UI Context용 임시 상태다.
      */
     TWeakObjectPtr<ADMRelicChest> OpenedChest;
+
+    void PlayLocal2DSound(USoundBase* Sound) const;
+    void PlayLocalWorldSound(USoundBase* Sound, const FVector& Location) const;
+
+    void HandleRandomEventAudioStateChanged(ADMMatchGameState* Source, FDMRandomEventRuntimeState NewState);
 
     /**
      * 현재 열어 본 Chest의 BaseSlot.
@@ -773,6 +843,8 @@ private:
 
     bool bIsLocalVisionDistortPresentationActive = false;
 
+    double LocalVisionDistortStartServerTime = 0.0;
+
     double LocalVisionDistortEndServerTime = 0.0;
 
 #pragma endregion
@@ -787,6 +859,75 @@ private:
      */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Skill|Vision", meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UMaterialInterface> VisionDistortPostProcessMaterial = nullptr;
+
+    /** 상대 대상 스킬의 실제 적용 순간 피해자에게만 재생하는 공통 알림음. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Skill", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> TargetedSkillHitSound = nullptr;
+
+#pragma endregion
+
+#pragma region Gameplay Audio Configuration
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Chest", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> ChestOpenSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Chest", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> ChestCloseSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Relic", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> RelicPickupSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Relic", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> RelicDropSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Relic", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> RelicDepositSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Relic", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> RelicStolenWarningSound = nullptr;
+
+    /** 상자·유물 위치 기반 사운드의 공용 감쇠. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|World", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundAttenuation> GameplayWorldAttenuation = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Quest", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> QuestStartedSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Quest", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> QuestDeadlineWarningSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Quest", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> QuestCompletedSound = nullptr;
+
+    /** 시작 3·2·1 및 종료 5·4·3·2·1에서 공통으로 사용하는 짧은 신호음. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Match", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> CountdownTickSound = nullptr;
+
+    /** Countdown→Playing 및 Playing/Overtime→Finished 확정 시 사용하는 긴 신호음. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Match", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> CountdownFinishSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Match", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> MatchEndThirtySecondWarningSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Random Event", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> RandomEventWarningSound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Match", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> VictorySound = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DM|Audio|Match", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> DefeatSound = nullptr;
+
+    int32 LastQuestStartedAudioRunId = 0;
+
+    FGameplayTag LastRandomEventWarningTag;
+    double LastRandomEventWarningStartServerTime = 0.0;
+
+    /** 서버가 마지막으로 승인한 로컬 Chest 세션. 닫기 사운드 검증에만 사용한다. */
+    TWeakObjectPtr<ADMRelicChest> ServerOpenedChestForAudio;
+    int32 LastQuestDeadlineWarningAudioRunId = 0;
+    int32 LastQuestCompletedAudioRunId = 0;
 
 #pragma endregion
 
@@ -880,6 +1021,9 @@ private:
 
     // 로컬 퇴장 요청의 중복 실행을 막는다. 복제하지 않는다.
     bool bLeavingMatchToTitle = false;
+
+    // 로컬 F1 홀드 상태이며 복제하지 않는다.
+    bool bControlsHelpHeld = false;
 
     void InputMenuStarted();
 

@@ -16,6 +16,8 @@
 
 namespace
 {
+    constexpr float SlowMovementSpeedMultiplier = 0.5f;
+
     class FSavedMove_DMCharacter : public FSavedMove_Character
     {
     public:
@@ -129,6 +131,9 @@ float UDMCharacterMovementComponent::GetMaxSpeed() const
 
     const ADMJellyCharacterBase* JellyCharacter = Cast<ADMJellyCharacterBase>(CharacterOwner);
 
+    const UDMCharacterStateComponent* StateComponent =
+        JellyCharacter != nullptr ? JellyCharacter->GetCharacterStateComponent() : nullptr;
+
     /*
      * Status.Stunned는
      * CharacterStateComponent가 SSOT다.
@@ -139,36 +144,36 @@ float UDMCharacterMovementComponent::GetMaxSpeed() const
      */
     if (JellyCharacter != nullptr)
     {
-        const UDMCharacterStateComponent* StateComponent = JellyCharacter->GetCharacterStateComponent();
-
         if (StateComponent != nullptr && StateComponent->HasStatus(DMGameplayTags::Status_Stunned))
         {
             return 0.0f;
         }
     }
 
-    if (!bWantsToSprint)
+    float DesiredMaxSpeed = DefaultMaxSpeed;
+
+    if (bWantsToSprint && JellyCharacter != nullptr && JellyCharacter->CanSprint())
     {
-        return DefaultMaxSpeed;
+        switch (MovementMode)
+        {
+        case MOVE_Walking:
+        case MOVE_NavWalking:
+        case MOVE_Falling:
+            DesiredMaxSpeed = JellyCharacter->GetSprintSpeed();
+            break;
+
+        default:
+            break;
+        }
     }
 
-    if (JellyCharacter == nullptr || !JellyCharacter->CanSprint())
+    // 서버와 소유 클라이언트가 같은 OwnerOnly 상태를 사용해 이동 예측을 일치시킨다.
+    if (StateComponent != nullptr && StateComponent->HasStatus(DMGameplayTags::Status_SlowMovement))
     {
-        return DefaultMaxSpeed;
+        DesiredMaxSpeed *= SlowMovementSpeedMultiplier;
     }
 
-    switch (MovementMode)
-    {
-    case MOVE_Walking:
-    case MOVE_NavWalking:
-    case MOVE_Falling:
-
-        return JellyCharacter->GetSprintSpeed();
-
-    default:
-
-        return DefaultMaxSpeed;
-    }
+    return DesiredMaxSpeed;
 }
 
 void UDMCharacterMovementComponent::OnMovementUpdated(

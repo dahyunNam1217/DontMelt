@@ -11,6 +11,7 @@
 class UTextBlock;
 class UProgressBar;
 class UDataTable;
+class UWidgetAnimation;
 
 class ADMMatchGameState;
 class ADMMatchPlayerState;
@@ -43,6 +44,7 @@ protected:
 
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
+    virtual void OnAnimationFinished_Implementation(const UWidgetAnimation* Animation) override;
 
 #pragma endregion
 
@@ -77,6 +79,10 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UProgressBar> PB_QuestProgress = nullptr;
 
+    /** 완료 시 재생할 선택 애니메이션. 없으면 즉시 숨긴다. */
+    UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
+    TObjectPtr<UWidgetAnimation> Anim_QuestExit = nullptr;
+
 #pragma endregion
 
 private:
@@ -87,6 +93,16 @@ private:
     void HandleQuestProgressChanged(UDMQuestProgressComponent* Source, FDMQuestPlayerProgress NewProgress);
 
     void RefreshPresentation();
+
+    void RefreshPresentationInternal(bool bAllowCompletionAnimation);
+
+    void ResetQuestRunPresentation(int32 NewRunId);
+
+    void CancelQuestExitAnimation();
+
+    void BeginQuestExit(int32 RunId, bool bAllowAnimation);
+
+    void FinishQuestExit(int32 ExpectedRunId);
 
     const FDMQuestDefinitionRow* FindQuestDefinition(const FGameplayTag& QuestTag);
 
@@ -109,6 +125,15 @@ private:
 
     // 퀘스트의 성공 여부가 아니라 UI 표시 활성화 여부만 저장한다.
     bool bPresentationActive = false;
+
+    // 로컬 표시 수명만 추적하며 서버 판정에는 관여하지 않는다.
+    int32 PresentedQuestRunId = 0;
+
+    int32 QuestExitHandledRunId = 0;
+
+    int32 ActiveQuestExitRunId = 0;
+
+    bool bQuestExitInProgress = false;
 
 #pragma endregion
 };

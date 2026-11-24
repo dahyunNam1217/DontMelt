@@ -76,6 +76,28 @@ void UDMJellyAnimInstance::NativeUpdateAnimation(const float DeltaSeconds)
 
     HorizontalVelocity.Z = 0.0f;
 
+    // 손상된 속도나 DeltaTime이 스프링 상태 전체로 전파되지 않도록
+    // 현재 표현 상태만 안전하게 초기화한다.
+    if (HorizontalVelocity.ContainsNaN() || !FMath::IsFinite(DeltaSeconds))
+    {
+        GroundSpeed = 0.0f;
+        NormalizedLocomotionSpeed = 0.0f;
+        bIsFalling = false;
+        bShouldMove = false;
+        bIsSprinting = false;
+
+        JellySpeedAlpha = 0.0f;
+        JellyForwardInertia = 0.0f;
+        JellySideInertia = 0.0f;
+        JellyPresentationAlpha = 0.0f;
+
+        PreviousHorizontalVelocity = FVector::ZeroVector;
+        bHasPreviousHorizontalVelocity = false;
+
+        ResetJellyBodyMotion();
+        return;
+    }
+
     GroundSpeed = HorizontalVelocity.Size();
 
     // 플레이어와 NPC가 가진 실제 이동 속도 설정을 사용한다.
@@ -244,7 +266,7 @@ void UDMJellyAnimInstance::UpdateJellyPresentation(const FVector& HorizontalVelo
 
         const FVector Right = CachedCharacter->GetActorRightVector();
 
-        const float ReferenceAcceleration = JellyTuning.ReferenceAcceleration;
+        const float ReferenceAcceleration = FMath::Max(JellyTuning.ReferenceAcceleration, 1.0f);
 
         const float TargetForward =
             FMath::Clamp(FVector::DotProduct(Acceleration, Forward) / ReferenceAcceleration, -1.0f, 1.0f);
@@ -362,6 +384,21 @@ void UDMJellyAnimInstance::AdvanceJellySpring(
     const float TargetAngle, const float DeltaSeconds, const float MaxAbsAngle, float& InOutAngle, float& InOutVelocity
 ) const
 {
+    const float SafeMaxAngle = FMath::Max(MaxAbsAngle, 0.0f);
+
+    if (!FMath::IsFinite(TargetAngle) || !FMath::IsFinite(DeltaSeconds) || !FMath::IsFinite(SafeMaxAngle))
+    {
+        InOutAngle = 0.0f;
+        InOutVelocity = 0.0f;
+        return;
+    }
+
+    if (!FMath::IsFinite(InOutAngle) || !FMath::IsFinite(InOutVelocity))
+    {
+        InOutAngle = FMath::Clamp(TargetAngle, -SafeMaxAngle, SafeMaxAngle);
+        InOutVelocity = 0.0f;
+    }
+
     if (DeltaSeconds <= KINDA_SMALL_NUMBER)
     {
         return;
@@ -370,14 +407,14 @@ void UDMJellyAnimInstance::AdvanceJellySpring(
     // 긴 프레임 중단 이후에는 오래된 각속도를 사용하지 않는다.
     if (DeltaSeconds > 0.10f)
     {
-        InOutAngle = FMath::Clamp(TargetAngle, -MaxAbsAngle, MaxAbsAngle);
+        InOutAngle = FMath::Clamp(TargetAngle, -SafeMaxAngle, SafeMaxAngle);
 
         InOutVelocity = 0.0f;
         return;
     }
 
-    const float SpringFrequency = JellyTuning.SpringFrequency;
-    const float DampingRatio = JellyTuning.SpringDampingRatio;
+    const float SpringFrequency = FMath::Max(JellyTuning.SpringFrequency, 0.1f);
+    const float DampingRatio = FMath::Max(JellyTuning.SpringDampingRatio, 0.0f);
 
     const float AngularFrequency = 2.0f * PI * SpringFrequency;
 
@@ -407,18 +444,18 @@ void UDMJellyAnimInstance::AdvanceJellySpring(
         InOutAngle += InOutVelocity * StepSeconds;
 
         // 최종 관절 회전 한계를 초과하지 않도록 보호한다.
-        if (InOutAngle > MaxAbsAngle)
+        if (InOutAngle > SafeMaxAngle)
         {
-            InOutAngle = MaxAbsAngle;
+            InOutAngle = SafeMaxAngle;
 
             if (InOutVelocity > 0.0f)
             {
                 InOutVelocity = 0.0f;
             }
         }
-        else if (InOutAngle < -MaxAbsAngle)
+        else if (InOutAngle < -SafeMaxAngle)
         {
-            InOutAngle = -MaxAbsAngle;
+            InOutAngle = -SafeMaxAngle;
 
             if (InOutVelocity < 0.0f)
             {
@@ -686,9 +723,16 @@ void UDMJellyAnimInstance::UpdateJellyBodyMotion(const FVector& HorizontalVeloci
 
     const float GaitAmplitude = FMath::Lerp(JellyTuning.WalkGaitRoll, JellyTuning.SprintGaitRoll, SprintGaitAlpha);
 
+    const float GaitPitchAmplitude =
+        FMath::Lerp(JellyTuning.WalkGaitPitch, JellyTuning.SprintGaitPitch, SprintGaitAlpha);
+
     const float MovingAlpha = FMath::Clamp(GroundSpeed / 80.0f, 0.0f, 1.0f);
 
     const float GaitRoll = FMath::Sin(JellyGaitPhase) * GaitAmplitude * MovingAlpha;
+
+    // 좌우 흔들림과 위상을 어긋나게 하여 걷기·달리기 중
+    // 몸통이 한 축으로만 반복 회전하는 느낌을 줄인다.
+    const float GaitPitch = FMath::Sin(JellyGaitPhase + 0.5f * PI) * GaitPitchAmplitude * MovingAlpha;
 
     // --------------------------------------------------
     // 출발·급정지·방향 전환 관성
@@ -770,7 +814,7 @@ void UDMJellyAnimInstance::UpdateJellyBodyMotion(const FVector& HorizontalVeloci
             // 지상 이동 및 관성
             // --------------------------------------------------
 
-            TargetPitch = BaseForwardLean + IdlePitch + ForwardInertiaAngle;
+            TargetPitch = BaseForwardLean + IdlePitch + GaitPitch + ForwardInertiaAngle;
 
             TargetRoll = IdleRoll + GaitRoll + SideInertiaAngle;
 

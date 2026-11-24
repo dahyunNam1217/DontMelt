@@ -5,6 +5,7 @@
 #include "Data/DMCombatRuleDataAsset.h"
 #include "Characters/DMPlayerCharacter.h"
 #include "Characters/Components/DMCharacterStateComponent.h"
+#include "Characters/Components/DMCharacterVFXComponent.h"
 #include "Characters/Components/DMPoseComponent.h"
 #include "Characters/DMJellyCharacterBase.h"
 #include "Characters/DMNPCCharacter.h"
@@ -1859,7 +1860,17 @@ void UDMCombatComponent::MulticastStopDefensePresentation_Implementation()
 {
     ADMPlayerCharacter* OwnerCharacter = Cast<ADMPlayerCharacter>(GetOwner());
 
-    if (OwnerCharacter == nullptr || OwnerCharacter->HasAuthority())
+    if (OwnerCharacter == nullptr)
+    {
+        return;
+    }
+
+    if (UDMCharacterVFXComponent* VFXComponent = OwnerCharacter->GetCharacterVFXComponent())
+    {
+        VFXComponent->StopDefenseEffect();
+    }
+
+    if (OwnerCharacter->HasAuthority())
     {
         return;
     }
@@ -1942,7 +1953,17 @@ void UDMCombatComponent::MulticastStopCombatPresentation_Implementation()
 {
     ADMPlayerCharacter* OwnerCharacter = Cast<ADMPlayerCharacter>(GetOwner());
 
-    if (OwnerCharacter == nullptr || OwnerCharacter->HasAuthority())
+    if (OwnerCharacter == nullptr)
+    {
+        return;
+    }
+
+    if (UDMCharacterVFXComponent* VFXComponent = OwnerCharacter->GetCharacterVFXComponent())
+    {
+        VFXComponent->StopDefenseEffect();
+    }
+
+    if (OwnerCharacter->HasAuthority())
     {
         return;
     }

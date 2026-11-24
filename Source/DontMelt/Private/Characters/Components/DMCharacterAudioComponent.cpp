@@ -207,6 +207,29 @@ void UDMCharacterAudioComponent::HandleFootstepNotify()
     );
 }
 
+void UDMCharacterAudioComponent::PlayJumpSound()
+{
+    const ADMPlayerCharacter* PlayerCharacter = Cast<ADMPlayerCharacter>(GetOwner());
+    const UWorld* World = GetWorld();
+
+    if (!IsValid(PlayerCharacter) || !IsValid(JumpSound.Get()) || World == nullptr
+        || World->GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    UGameplayStatics::PlaySoundAtLocation(
+        this,
+        JumpSound.Get(),
+        PlayerCharacter->GetActorLocation(),
+        PlayerCharacter->GetActorRotation(),
+        1.0f,
+        1.0f,
+        0.0f,
+        JumpAttenuation.Get()
+    );
+}
+
 #pragma region Combat Audio
 
 void UDMCharacterAudioComponent::PlayAttackSound()

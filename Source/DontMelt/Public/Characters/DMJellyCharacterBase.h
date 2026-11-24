@@ -9,6 +9,7 @@ class UDMCharacterAudioComponent;
 class UDMJellyPhysicsComponent;
 class UAnimMontage;
 class UDMCharacterVFXComponent;
+class UNiagaraComponent;
 
  /**
  * Player와 NPC가 공유하는 Jelly Character 기반 클래스.
@@ -90,6 +91,10 @@ public:
         return CharacterVFXComponent;
     }
 
+    virtual UNiagaraComponent* GetAttackVFXComponent() const { return nullptr; }
+    virtual UNiagaraComponent* GetDefenseVFXComponent() const { return nullptr; }
+    UNiagaraComponent* GetStunVFXComponent() const { return StunVFXComponent; }
+
     UDMJellyPhysicsComponent* GetJellyPhysicsComponent() const;
 
 #pragma endregion
@@ -149,6 +154,10 @@ private:
         VisibleAnywhere, BlueprintReadOnly, Category = "DontMelt|Components", meta = (AllowPrivateAccess = "true")
     )
     TObjectPtr<UDMCharacterVFXComponent> CharacterVFXComponent;
+
+    /** BP Viewport에서 머리 위 별 연출을 편집하는 스턴 컴포넌트. */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DontMelt|VFX", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UNiagaraComponent> StunVFXComponent;
 
 #pragma endregion
 

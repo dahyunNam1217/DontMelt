@@ -28,8 +28,8 @@ namespace
     constexpr float SettingsSliderTolerance = 0.001f;
 
     // 기본값은 SaveGame 기본값과 동일하게 유지한다.
-    const TCHAR* DefaultWindowModeOption = TEXT("테두리 없는 창");
-    const TCHAR* DefaultGraphicsQualityOption = TEXT("보통");
+    constexpr int32 DefaultWindowModeIndex = 1;
+    constexpr int32 DefaultGraphicsQualityIndex = 1;
     const TCHAR* DefaultFrameRateLimitOption = TEXT("60");
     constexpr bool bDefaultVSyncEnabled = false;
     constexpr float DefaultVolume = 1.0f;
@@ -40,8 +40,8 @@ namespace
 
 bool FDMSettingsValues::IsGraphicsEqual(const FDMSettingsValues& Other) const
 {
-    return ResolutionOption == Other.ResolutionOption && WindowModeOption == Other.WindowModeOption
-        && GraphicsQualityOption == Other.GraphicsQualityOption && FrameRateLimitOption == Other.FrameRateLimitOption
+    return ResolutionOption == Other.ResolutionOption && WindowMode == Other.WindowMode
+        && GraphicsQualityLevel == Other.GraphicsQualityLevel && FrameRateLimitOption == Other.FrameRateLimitOption
         && bVSyncEnabled == Other.bVSyncEnabled;
 }
 
@@ -51,7 +51,7 @@ bool FDMSettingsValues::IsLocalEqual(const FDMSettingsValues& Other) const
         && FMath::IsNearlyEqual(SFXVolume, Other.SFXVolume, SettingsSliderTolerance)
         && FMath::IsNearlyEqual(MusicVolume, Other.MusicVolume, SettingsSliderTolerance)
         && FMath::IsNearlyEqual(MouseSensitivity, Other.MouseSensitivity, SettingsSliderTolerance)
-        && bVoiceActivationEnabled == Other.bVoiceActivationEnabled;
+        && bVoiceActivationEnabled == Other.bVoiceActivationEnabled && LanguageCode == Other.LanguageCode;
 }
 
 #pragma endregion
@@ -61,6 +61,11 @@ bool FDMSettingsValues::IsLocalEqual(const FDMSettingsValues& Other) const
 void UDMSettingsWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
+
+    if (UDMGameInstance* GameInstance = Cast<UDMGameInstance>(GetGameInstance()))
+    {
+        GameInstance->BindCommonUIClickSound(this);
+    }
 
     if (!ensure(
             SW_SettingsPages && BTN_Graphics && BTN_Audio && BTN_Controls && BTN_Language && BTN_Voice && CB_Resolution
@@ -130,19 +135,20 @@ void UDMSettingsWidget::NativeOnInitialized()
     // 타이틀·로비에서 Esc를 받기 위해 포커스를 받을 수 있게 한다.
     SetIsFocusable(true);
 
-    // 번역 데이터가 아직 없으므로 한국어만 표시한다.
+    // 언어 이름은 각 언어의 고유 표기를 사용한다. 저장값은 culture code다.
     CB_Language->ClearOptions();
     CB_Language->AddOption(TEXT("한국어"));
-    CB_Language->SetSelectedOption(TEXT("한국어"));
-    CB_Language->SetIsEnabled(false);
+    CB_Language->AddOption(TEXT("English"));
+    CB_Language->SetIsEnabled(true);
+    CB_Language->OnSelectionChanged.AddUniqueDynamic(this, &UDMSettingsWidget::HandleOptionSelectionChanged);
 
     // 지원하는 두 음성 모드만 제공한다.
     CB_VoiceMode->ClearOptions();
 
-    CB_VoiceMode->AddOption(TEXT("눌러서 말하기"));
-    CB_VoiceMode->AddOption(TEXT("음성 감지"));
+    CB_VoiceMode->AddOption(NSLOCTEXT("DMSettings", "VoicePushToTalk", "눌러서 말하기").ToString());
+    CB_VoiceMode->AddOption(NSLOCTEXT("DMSettings", "VoiceActivation", "음성 감지").ToString());
 
-    CB_VoiceMode->SetSelectedOption(TEXT("눌러서 말하기"));
+    CB_VoiceMode->SetSelectedIndex(0);
 
     CB_VoiceMode->SetIsEnabled(true);
 
@@ -290,8 +296,13 @@ void UDMSettingsWidget::RefreshLocalSettings()
     SL_MouseSensitivity->SetValue(LocalSettings->GetMouseSensitivity());
 
     // 저장된 음성 모드를 설정 ComboBox에 표시한다.
-    CB_VoiceMode->SetSelectedOption(
-        LocalSettings->GetVoiceActivationEnabled() ? TEXT("음성 감지") : TEXT("눌러서 말하기")
+    CB_VoiceMode->ClearOptions();
+    CB_VoiceMode->AddOption(NSLOCTEXT("DMSettings", "VoicePushToTalk", "눌러서 말하기").ToString());
+    CB_VoiceMode->AddOption(NSLOCTEXT("DMSettings", "VoiceActivation", "음성 감지").ToString());
+    CB_VoiceMode->SetSelectedIndex(LocalSettings->GetVoiceActivationEnabled() ? 1 : 0);
+
+    CB_Language->SetSelectedOption(
+        LocalSettings->GetLanguageCode() == TEXT("en") ? TEXT("English") : TEXT("한국어")
     );
 
     HandleSensitivityPreviewChanged(SL_MouseSensitivity->GetValue());
@@ -358,55 +369,55 @@ void UDMSettingsWidget::RefreshGraphicsSettings()
 
     // 화면 모드.
     CB_WindowMode->ClearOptions();
-    CB_WindowMode->AddOption(TEXT("전체 화면"));
-    CB_WindowMode->AddOption(TEXT("테두리 없는 창"));
-    CB_WindowMode->AddOption(TEXT("창 모드"));
+    CB_WindowMode->AddOption(NSLOCTEXT("DMSettings", "WindowModeFullscreen", "전체 화면").ToString());
+    CB_WindowMode->AddOption(NSLOCTEXT("DMSettings", "WindowModeBorderless", "테두리 없는 창").ToString());
+    CB_WindowMode->AddOption(NSLOCTEXT("DMSettings", "WindowModeWindowed", "창 모드").ToString());
 
     switch (Settings->GetFullscreenMode())
     {
     case EWindowMode::Fullscreen:
-        CB_WindowMode->SetSelectedOption(TEXT("전체 화면"));
+        CB_WindowMode->SetSelectedIndex(0);
         break;
 
     case EWindowMode::WindowedFullscreen:
-        CB_WindowMode->SetSelectedOption(TEXT("테두리 없는 창"));
+        CB_WindowMode->SetSelectedIndex(1);
         break;
 
     default:
-        CB_WindowMode->SetSelectedOption(TEXT("창 모드"));
+        CB_WindowMode->SetSelectedIndex(2);
         break;
     }
 
     // 그래픽 품질.
     CB_GraphicsQuality->ClearOptions();
-    CB_GraphicsQuality->AddOption(TEXT("낮음"));
-    CB_GraphicsQuality->AddOption(TEXT("보통"));
-    CB_GraphicsQuality->AddOption(TEXT("높음"));
-    CB_GraphicsQuality->AddOption(TEXT("매우 높음"));
-    CB_GraphicsQuality->AddOption(TEXT("사용자 지정"));
+    CB_GraphicsQuality->AddOption(NSLOCTEXT("DMSettings", "QualityLow", "낮음").ToString());
+    CB_GraphicsQuality->AddOption(NSLOCTEXT("DMSettings", "QualityMedium", "보통").ToString());
+    CB_GraphicsQuality->AddOption(NSLOCTEXT("DMSettings", "QualityHigh", "높음").ToString());
+    CB_GraphicsQuality->AddOption(NSLOCTEXT("DMSettings", "QualityEpic", "매우 높음").ToString());
+    CB_GraphicsQuality->AddOption(NSLOCTEXT("DMSettings", "QualityCustom", "사용자 지정").ToString());
 
     const int32 Quality = Settings->GetOverallScalabilityLevel();
 
     switch (Quality)
     {
     case 0:
-        CB_GraphicsQuality->SetSelectedOption(TEXT("낮음"));
+        CB_GraphicsQuality->SetSelectedIndex(0);
         break;
 
     case 1:
-        CB_GraphicsQuality->SetSelectedOption(TEXT("보통"));
+        CB_GraphicsQuality->SetSelectedIndex(1);
         break;
 
     case 2:
-        CB_GraphicsQuality->SetSelectedOption(TEXT("높음"));
+        CB_GraphicsQuality->SetSelectedIndex(2);
         break;
 
     case 3:
-        CB_GraphicsQuality->SetSelectedOption(TEXT("매우 높음"));
+        CB_GraphicsQuality->SetSelectedIndex(3);
         break;
 
     default:
-        CB_GraphicsQuality->SetSelectedOption(TEXT("사용자 지정"));
+        CB_GraphicsQuality->SetSelectedIndex(4);
         break;
     }
 
@@ -444,7 +455,7 @@ void UDMSettingsWidget::HandleApplyClicked()
     // 탭과 관계없이 변경된 지원 설정 전체를 한 번에 적용한다.
     if (ApplyPendingChanges())
     {
-        TXT_SettingsNotice->SetText(FText::FromString(TEXT("설정을 적용했습니다.")));
+        TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "SettingsApplied", "설정을 적용했습니다."));
     }
 }
 
@@ -498,40 +509,13 @@ bool UDMSettingsWidget::ApplyGraphicsValues(const FDMSettingsValues& Values)
         }
     }
 
-    // 화면 모드.
-    const FString& Mode = Values.WindowModeOption;
+    // 표시 문자열과 무관한 내부 값만 엔진 설정에 전달한다.
+    Settings->SetFullscreenMode(Values.WindowMode);
 
-    if (Mode == TEXT("전체 화면"))
+    // 4는 사용자 지정이므로 기존 개별 품질을 유지한다.
+    if (Values.GraphicsQualityLevel >= 0 && Values.GraphicsQualityLevel <= 3)
     {
-        Settings->SetFullscreenMode(EWindowMode::Fullscreen);
-    }
-    else if (Mode == TEXT("테두리 없는 창"))
-    {
-        Settings->SetFullscreenMode(EWindowMode::WindowedFullscreen);
-    }
-    else if (Mode == TEXT("창 모드"))
-    {
-        Settings->SetFullscreenMode(EWindowMode::Windowed);
-    }
-
-    // 그래픽 품질.
-    const FString& Quality = Values.GraphicsQualityOption;
-
-    if (Quality == TEXT("낮음"))
-    {
-        Settings->SetOverallScalabilityLevel(0);
-    }
-    else if (Quality == TEXT("보통"))
-    {
-        Settings->SetOverallScalabilityLevel(1);
-    }
-    else if (Quality == TEXT("높음"))
-    {
-        Settings->SetOverallScalabilityLevel(2);
-    }
-    else if (Quality == TEXT("매우 높음"))
-    {
-        Settings->SetOverallScalabilityLevel(3);
+        Settings->SetOverallScalabilityLevel(Values.GraphicsQualityLevel);
     }
 
     // 사용자 지정이면 기존 개별 품질을 유지한다.
@@ -562,9 +546,10 @@ void UDMSettingsWidget::HandleResetClicked()
 
     UpdatePendingChangesState();
 
-    TXT_SettingsNotice->SetText(FText::FromString(
-        bHasPendingChanges ? TEXT("기본값을 선택했습니다. 적용을 눌러 저장하세요.") : TEXT("이미 기본값입니다.")
-    ));
+    TXT_SettingsNotice->SetText(
+        bHasPendingChanges
+            ? NSLOCTEXT("DMSettings", "DefaultsSelected", "기본값을 선택했습니다. 적용을 눌러 저장하세요.")
+            : NSLOCTEXT("DMSettings", "AlreadyDefaults", "이미 기본값입니다."));
 }
 
 void UDMSettingsWidget::HandleBackClicked()
@@ -605,12 +590,12 @@ void UDMSettingsWidget::ShowCategory(int32 PageIndex)
     switch (PageIndex)
     {
     case 3:
-        TXT_SettingsNotice->SetText(FText::FromString(TEXT("현재 한국어만 지원합니다.")));
+        TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "LanguageHelp", "한국어와 영어를 지원합니다."));
         break;
 
     case 4:
         TXT_SettingsNotice->SetText(
-            FText::FromString(TEXT("음성 모드: PTT는 V키로 송신 전환, 음성 감지는 M키로 음소거 전환"))
+            NSLOCTEXT("DMSettings", "VoiceModeHelp", "음성 모드: PTT는 V키로 송신 전환, 음성 감지는 M키로 음소거 전환")
         );
         break;
 
@@ -677,14 +662,19 @@ FDMSettingsValues UDMSettingsWidget::ReadValuesFromControls() const
     if (!IsValid(CB_Resolution.Get()) || !IsValid(CB_WindowMode.Get()) || !IsValid(CB_GraphicsQuality.Get())
         || !IsValid(CB_FrameRateLimit.Get()) || !IsValid(CHK_VSync.Get()) || !IsValid(SL_MasterVolume.Get())
         || !IsValid(SL_SFXVolume.Get()) || !IsValid(SL_MusicVolume.Get()) || !IsValid(SL_MouseSensitivity.Get())
-        || !IsValid(CB_VoiceMode.Get()))
+        || !IsValid(CB_VoiceMode.Get()) || !IsValid(CB_Language.Get()))
     {
         return Values;
     }
 
     Values.ResolutionOption = CB_Resolution->GetSelectedOption();
-    Values.WindowModeOption = CB_WindowMode->GetSelectedOption();
-    Values.GraphicsQualityOption = CB_GraphicsQuality->GetSelectedOption();
+    switch (CB_WindowMode->GetSelectedIndex())
+    {
+    case 0: Values.WindowMode = EWindowMode::Fullscreen; break;
+    case 1: Values.WindowMode = EWindowMode::WindowedFullscreen; break;
+    default: Values.WindowMode = EWindowMode::Windowed; break;
+    }
+    Values.GraphicsQualityLevel = CB_GraphicsQuality->GetSelectedIndex();
     Values.FrameRateLimitOption = CB_FrameRateLimit->GetSelectedOption();
     Values.bVSyncEnabled = CHK_VSync->IsChecked();
 
@@ -695,7 +685,8 @@ FDMSettingsValues UDMSettingsWidget::ReadValuesFromControls() const
     // 저장 시 Subsystem이 적용하는 범위와 같은 기준으로 비교한다.
     Values.MouseSensitivity = FMath::Clamp(SL_MouseSensitivity->GetValue(), 0.1f, 3.0f);
 
-    Values.bVoiceActivationEnabled = CB_VoiceMode->GetSelectedOption() == TEXT("음성 감지");
+    Values.bVoiceActivationEnabled = CB_VoiceMode->GetSelectedIndex() == 1;
+    Values.LanguageCode = CB_Language->GetSelectedIndex() == 1 ? TEXT("en") : TEXT("ko");
 
     return Values;
 }
@@ -735,7 +726,7 @@ bool UDMSettingsWidget::ApplyPendingChanges()
     // 1) 실패할 수 있는 검사를 먼저 끝내 일부만 적용되는 상황을 줄인다.
     if (bGraphicsChanged && !ValidateGraphicsValues(PendingValues))
     {
-        TXT_SettingsNotice->SetText(FText::FromString(TEXT("그래픽 설정을 적용할 수 없습니다.")));
+        TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "InvalidGraphics", "그래픽 설정을 적용할 수 없습니다."));
 
         return false;
     }
@@ -745,7 +736,7 @@ bool UDMSettingsWidget::ApplyPendingChanges()
     {
         if (!BeginVideoConfirmation(PendingValues))
         {
-            TXT_SettingsNotice->SetText(FText::FromString(TEXT("화면 설정을 미리 적용할 수 없습니다.")));
+            TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "VideoPreviewFailed", "화면 설정을 미리 적용할 수 없습니다."));
         }
 
         // 아직 최종 저장을 하지 않았다.
@@ -762,7 +753,7 @@ bool UDMSettingsWidget::ApplyPendingChanges()
 
         if (!IsValid(LocalSettings))
         {
-            TXT_SettingsNotice->SetText(FText::FromString(TEXT("로컬 설정을 찾을 수 없습니다.")));
+            TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "LocalSettingsMissing", "로컬 설정을 찾을 수 없습니다."));
 
             return false;
         }
@@ -772,6 +763,7 @@ bool UDMSettingsWidget::ApplyPendingChanges()
         const float PreviousMusic = LocalSettings->GetMusicVolume();
         const float PreviousSensitivity = LocalSettings->GetMouseSensitivity();
         const bool bPreviousVoiceActivation = LocalSettings->GetVoiceActivationEnabled();
+        const FString PreviousLanguageCode = LocalSettings->GetLanguageCode();
 
         LocalSettings->SetAudioVolumes(PendingValues.MasterVolume, PendingValues.SFXVolume, PendingValues.MusicVolume);
 
@@ -779,6 +771,14 @@ bool UDMSettingsWidget::ApplyPendingChanges()
 
         // 음성 모드도 다른 로컬 설정과 같은 SaveGame에 저장한다.
         LocalSettings->SetVoiceActivationEnabled(PendingValues.bVoiceActivationEnabled);
+
+        if (!LocalSettings->SetLanguageCode(PendingValues.LanguageCode))
+        {
+            TXT_SettingsNotice->SetText(
+                NSLOCTEXT("DMSettings", "LanguageApplyFailed", "언어 설정을 적용할 수 없습니다.")
+            );
+            return false;
+        }
 
         if (!LocalSettings->SaveSettings())
         {
@@ -790,7 +790,9 @@ bool UDMSettingsWidget::ApplyPendingChanges()
             // 저장 실패 시 음성 모드의 메모리 원본도 복원한다.
             LocalSettings->SetVoiceActivationEnabled(bPreviousVoiceActivation);
 
-            TXT_SettingsNotice->SetText(FText::FromString(TEXT("설정 저장에 실패했습니다.")));
+            LocalSettings->SetLanguageCode(PreviousLanguageCode);
+
+            TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "SaveFailed", "설정 저장에 실패했습니다."));
 
             return false;
         }
@@ -810,7 +812,7 @@ bool UDMSettingsWidget::ApplyPendingChanges()
     // 3) 그래픽 적용. 검사를 통과한 값만 전달한다.
     if (bGraphicsChanged && !ApplyGraphicsValues(PendingValues))
     {
-        TXT_SettingsNotice->SetText(FText::FromString(TEXT("그래픽 설정 적용에 실패했습니다.")));
+        TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "GraphicsApplyFailed", "그래픽 설정 적용에 실패했습니다."));
 
         // 이미 저장한 음량·감도는 기준값에 반영한다.
         ReloadFromSavedSettings();
@@ -824,7 +826,7 @@ bool UDMSettingsWidget::ApplyPendingChanges()
     // 장치가 요청과 다른 그래픽 값을 사용하게 되었다면 안내한다.
     if (bGraphicsChanged && !SavedValues.IsGraphicsEqual(PendingValues))
     {
-        TXT_SettingsNotice->SetText(FText::FromString(TEXT("일부 그래픽 설정이 현재 장치에 맞게 조정되었습니다.")));
+        TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "GraphicsAdjusted", "일부 그래픽 설정이 현재 장치에 맞게 조정되었습니다."));
     }
 
     return true;
@@ -835,8 +837,8 @@ void UDMSettingsWidget::ApplyDefaultValuesToControls()
     TGuardValue<bool> PopulateGuard(bIsPopulatingControls, true);
 
     // 해상도는 장치마다 지원 목록이 다르므로 현재 선택을 유지한다.
-    CB_WindowMode->SetSelectedOption(DefaultWindowModeOption);
-    CB_GraphicsQuality->SetSelectedOption(DefaultGraphicsQualityOption);
+    CB_WindowMode->SetSelectedIndex(DefaultWindowModeIndex);
+    CB_GraphicsQuality->SetSelectedIndex(DefaultGraphicsQualityIndex);
     CB_FrameRateLimit->SetSelectedOption(DefaultFrameRateLimitOption);
     CHK_VSync->SetIsChecked(bDefaultVSyncEnabled);
 
@@ -850,7 +852,9 @@ void UDMSettingsWidget::ApplyDefaultValuesToControls()
     HandleSensitivityPreviewChanged(SL_MouseSensitivity->GetValue());
 
     // 음성 모드의 기본값은 PTT다.
-    CB_VoiceMode->SetSelectedOption(TEXT("눌러서 말하기"));
+    CB_VoiceMode->SetSelectedIndex(0);
+
+    CB_Language->SetSelectedOption(TEXT("한국어"));
 }
 
 void UDMSettingsWidget::HandleOptionSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
@@ -906,9 +910,9 @@ void UDMSettingsWidget::ShowConfirmation(const EDMSettingsPendingAction Action, 
     PendingAction = Action;
     PendingCategoryIndex = TargetPageIndex;
 
-    TXT_ConfirmTitle->SetText(FText::FromString(TEXT("변경사항 확인")));
+    TXT_ConfirmTitle->SetText(NSLOCTEXT("DMSettings", "ConfirmChangesTitle", "변경사항 확인"));
 
-    TXT_ConfirmDescription->SetText(FText::FromString(TEXT("변경된 설정이 있습니다. 적용하시겠습니까?")));
+    TXT_ConfirmDescription->SetText(NSLOCTEXT("DMSettings", "ConfirmChangesDescription", "변경된 설정이 있습니다. 적용하시겠습니까?"));
 
     BTN_ConfirmApply->SetIsEnabled(true);
 
@@ -1009,7 +1013,7 @@ void UDMSettingsWidget::HandleCancelConfirmationClicked()
 bool UDMSettingsWidget::RequiresVideoConfirmation(const FDMSettingsValues& Values) const
 {
     return Values.ResolutionOption != SavedValues.ResolutionOption
-        || Values.WindowModeOption != SavedValues.WindowModeOption;
+        || Values.WindowMode != SavedValues.WindowMode;
 }
 
 bool UDMSettingsWidget::BeginVideoConfirmation(const FDMSettingsValues& Values)
@@ -1043,20 +1047,7 @@ bool UDMSettingsWidget::BeginVideoConfirmation(const FDMSettingsValues& Values)
         }
     }
 
-    EWindowMode::Type NewWindowMode = EWindowMode::Windowed;
-
-    if (Values.WindowModeOption == TEXT("전체 화면"))
-    {
-        NewWindowMode = EWindowMode::Fullscreen;
-    }
-    else if (Values.WindowModeOption == TEXT("테두리 없는 창"))
-    {
-        NewWindowMode = EWindowMode::WindowedFullscreen;
-    }
-    else if (Values.WindowModeOption != TEXT("창 모드"))
-    {
-        return false;
-    }
+    const EWindowMode::Type NewWindowMode = Values.WindowMode;
 
     // 현재 정상 화면을 마지막 확인된 화면 모드로 기록한다.
     Settings->ConfirmVideoMode();
@@ -1107,9 +1098,10 @@ void UDMSettingsWidget::UpdateVideoConfirmationCountdown()
 
     const int32 Seconds = FMath::CeilToInt(Remaining);
 
-    TXT_VideoCountdown->SetText(
-        FText::FromString(FString::Printf(TEXT("%d초 후 이전 화면 설정으로 복원됩니다."), Seconds))
-    );
+    TXT_VideoCountdown->SetText(FText::Format(
+        NSLOCTEXT("DMSettings", "VideoRevertCountdown", "{0}초 후 이전 화면 설정으로 복원됩니다."),
+        FText::AsNumber(Seconds)
+    ));
 }
 
 void UDMSettingsWidget::EndVideoConfirmation(const bool bRevert)
@@ -1155,7 +1147,7 @@ void UDMSettingsWidget::HandleKeepVideoModeClicked()
         ReloadFromSavedSettings();
         HideConfirmation();
 
-        TXT_SettingsNotice->SetText(FText::FromString(TEXT("설정 적용에 실패하여 이전 화면으로 복원했습니다.")));
+        TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "ApplyReverted", "설정 적용에 실패하여 이전 화면으로 복원했습니다."));
 
         SetKeyboardFocus();
         return;
@@ -1186,7 +1178,7 @@ void UDMSettingsWidget::HandleRevertVideoModeClicked()
     ReloadFromSavedSettings();
     HideConfirmation();
 
-    TXT_SettingsNotice->SetText(FText::FromString(TEXT("이전 화면 설정으로 복원했습니다.")));
+    TXT_SettingsNotice->SetText(NSLOCTEXT("DMSettings", "VideoReverted", "이전 화면 설정으로 복원했습니다."));
 
     SetKeyboardFocus();
 }

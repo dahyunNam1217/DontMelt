@@ -57,10 +57,11 @@ void UDMLobbyPlayerRowWidget::RefreshRow()
 
     TXT_PlayerName->SetText(FText::FromString(PlayerState->GetPlayerName()));
 
-    TXT_Host->SetText(PlayerState->IsHost() ? FText::FromString(TEXT("HOST")) : FText::GetEmpty());
+    TXT_Host->SetText(PlayerState->IsHost() ? NSLOCTEXT("DMLobby", "HostLabel", "HOST") : FText::GetEmpty());
 
     TXT_Ready->SetText(
-        PlayerState->IsReady() ? FText::FromString(TEXT("준비 완료")) : FText::FromString(TEXT("대기 중"))
+        PlayerState->IsReady() ? NSLOCTEXT("DMLobby", "ReadyState", "준비 완료")
+                               : NSLOCTEXT("DMLobby", "WaitingState", "대기 중")
     );
 }
 

@@ -12,11 +12,19 @@ namespace DMGameplayTags
 
     UE_DEFINE_GAMEPLAY_TAG(Status_VisionDistorted, "Status.VisionDistorted");
 
+    UE_DEFINE_GAMEPLAY_TAG(Status_SizeAmplified, "Status.SizeAmplified");
+
+    UE_DEFINE_GAMEPLAY_TAG(Status_SlowMovement, "Status.SlowMovement");
+
     UE_DEFINE_GAMEPLAY_TAG(Skill_Invisibility, "Skill.Invisibility");
 
     UE_DEFINE_GAMEPLAY_TAG(Skill_FootstepAmplify, "Skill.FootstepAmplify");
 
     UE_DEFINE_GAMEPLAY_TAG(Skill_VisionDistort, "Skill.VisionDistort");
+
+    UE_DEFINE_GAMEPLAY_TAG(Skill_SizeAmplification, "Skill.SizeAmplification");
+
+    UE_DEFINE_GAMEPLAY_TAG(Skill_SlowMovement, "Skill.SlowMovement");
 
     UE_DEFINE_GAMEPLAY_TAG(Quest_JumpCount, "Quest.JumpCount");
 

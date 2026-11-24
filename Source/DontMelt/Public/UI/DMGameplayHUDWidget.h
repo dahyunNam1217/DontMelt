@@ -16,6 +16,8 @@ class ADMMatchPlayerController;
 class ADMPlayerCharacter;
 class ADMMatchPlayerState;
 class UDMSkillBarWidget;
+class UDMMinimapWidget;
+class UDMControlsHelpWidget;
 
 /**
  * Match Phase and remaining-time presentation.
@@ -45,6 +47,10 @@ public:
      */
     void SetRelicHUDSources(ADMMatchPlayerController* InController, ADMPlayerCharacter* InCharacter);
 
+    void SetAuxiliaryHUDSources(ADMMatchPlayerState* InPlayerState, ADMPlayerCharacter* InCharacter);
+
+    void SetAuxiliaryPresentation(bool bShowMinimap, bool bShowControls, bool bShowDetailedControls);
+
     void SetPresentationActive(bool bActive);
 
     void RefreshFromMatchState();
@@ -71,6 +77,12 @@ protected:
     /** 기존 유물 HUD를 재사용하는 단일 자식 Widget */
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UDMRelicHUDWidget> RelicHUD = nullptr;
+
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UDMMinimapWidget> Minimap = nullptr;
+
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UDMControlsHelpWidget> ControlsHelp = nullptr;
 
 #pragma endregion
 

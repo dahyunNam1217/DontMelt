@@ -4,6 +4,7 @@
 #include "Core/DMLocalSettingsSaveGame.h"
 
 #include "Kismet/GameplayStatics.h"
+#include "Internationalization/Internationalization.h"
 
 namespace
 {
@@ -31,6 +32,39 @@ void UDMLocalSettingsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
             UGameplayStatics::CreateSaveGameObject(UDMLocalSettingsSaveGame::StaticClass())
         );
     }
+
+
+    // 저장된 로컬 언어를 새로 생성되는 FText와 현재 UI에 적용한다.
+    SetLanguageCode(SettingsData->LanguageCode);
+}
+
+#pragma endregion
+
+#pragma region Localization
+
+FString UDMLocalSettingsSubsystem::GetLanguageCode() const
+{
+    return IsValid(SettingsData.Get()) ? SettingsData->LanguageCode : TEXT("ko");
+}
+
+bool UDMLocalSettingsSubsystem::SetLanguageCode(const FString& InLanguageCode)
+{
+    if (!IsValid(SettingsData.Get()))
+    {
+        return false;
+    }
+
+    const FString NormalizedCode = InLanguageCode.Equals(TEXT("en"), ESearchCase::IgnoreCase)
+        ? TEXT("en")
+        : TEXT("ko");
+
+    if (!FInternationalization::Get().SetCurrentCulture(NormalizedCode))
+    {
+        return false;
+    }
+
+    SettingsData->LanguageCode = NormalizedCode;
+    return true;
 }
 
 #pragma endregion

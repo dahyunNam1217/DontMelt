@@ -37,6 +37,9 @@ public:
      */
     void HandleFootstepNotify();
 
+    /** 실제 플레이어 점프가 성립했을 때 위치 기반 사운드를 재생한다. */
+    void PlayJumpSound();
+
     /**
      * Invisibility Presentation 상태를
      * Audio Presentation에 반영한다.
@@ -176,6 +179,14 @@ private:
         EditDefaultsOnly, BlueprintReadOnly, Category = "DontMelt|Audio|Footstep", meta = (AllowPrivateAccess = "true")
     )
     TObjectPtr<USoundAttenuation> FootstepAttenuation = nullptr;
+
+    /** 플레이어의 실제 점프 시작 시 재생할 3D 사운드. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DontMelt|Audio|Movement", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundBase> JumpSound = nullptr;
+
+    /** 미설정 시 Sound Asset 자체의 감쇠 설정을 사용한다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DontMelt|Audio|Movement", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<USoundAttenuation> JumpAttenuation = nullptr;
 
 #pragma endregion
 
