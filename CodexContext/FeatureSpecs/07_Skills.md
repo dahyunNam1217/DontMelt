@@ -38,17 +38,21 @@
 
 ## 스킬 표
 
+기존 3종의 수치는 설계 기록이다. 새 두 스킬은 C++ 선택·효과 경로를 확인했으며 활성 DA·IMC 값과 목표 수치는 확인 대기다.
+
 | 태그 | 입력 | 쿨다운 | 지속 | 처리 |
 |---|---|---:|---:|---|
 | `Skill.Invisibility` | 1 | 25s | 5s | 자신 Mesh를 숨기되 Actor/충돌은 유지, 공격 시 종료 |
-| `Skill.FootstepAmplify` | 2 | 60s | 8s | 시전자에게만 대상 발소리 증폭 |
+| `Skill.FootstepAmplify` | 2 | 60s | 8s | 시전자는 증폭된 발소리를 듣고, 대상 Controller에는 지연 경고 전달 |
 | `Skill.VisionDistort` | 3 | 600s | 핵심 5s | 대상 Client PostProcess; 0.75s 진입+5s 핵심+0.5s 해제 |
+| `Skill.SizeAmplification` (크기 증폭) | 활성 IMC 확인 | 활성 DA 확인 | 활성 DA 확인 | 캡슐 충돌 확인과 크기 전환·복구 |
+| `Skill.SlowMovement` (이동 둔화) | 활성 IMC 확인 | 활성 DA 확인 | 활성 DA 확인 | 대상 상태 적용, 최대 이동 속도 0.5배 |
 
 유물 운반 중 투명화 불가. 스킬 Commit 전에 Phase, LifeState, ActionState, 상태 태그, 자세, 운반 여부, 쿨다운/대상 자격을 검증한다.
 
 ## 대상 선택(상대 대상 스킬)
 
-1. 2/3번 선택 시 `IMC_SkillTargeting`으로 전환.
+1. 기존 발소리·시야 교란과 신규 크기 증폭·이동 둔화의 대상 선택은 `IMC_SkillTargeting`으로 전환한다.
 2. `LMB` = `RandomEligible`; `RMB` = `LeadingEligible`(RelicManager 등록 수 최대인 적격 상대, 동률 무작위).
 3. 클라이언트는 **대상 Actor·ID·진영 정보가 아니라 정책 Enum만** 서버에 전달.
 4. NPC/자신/사망/SpawnProtected는 후보 제외. 거리·시야 제한 없음.
@@ -56,9 +60,13 @@
 
 ## 네트워크 및 표현
 
+피격 대상의 크기·둔화 타이밍은 owner-only, `SizeState`는 외형을 위한 별도 복제다. 발소리 증폭 경고는 대상 본인의 HUD에만 전달된다. 대상 효과음과 정리 순서는 [기술 문서](../../Docs/Technical/10_Skill_Cooldown_Target.md)를 참조한다.
+
 `SkillTag + EndServerTime` 소유자 복제, HUD는 서버 시각 차이 계산. 관찰자에게는 실제 필요 표현(투명 상태 등) 최소값 RepNotify; Multicast 한번만으로 지속효과 표현 금지(늦은 Relevancy). 발소리 증폭은 서버 대상에 불필요한 새 Tag를 달지 않고 시전자 전용 청취 경로 사용. 시야 교란은 타깃 본인 Client의 PostProcess MID를 로컬로 처리.
 
 ## 수명/회귀
+
+크기 효과의 충돌 실패·원래 크기 복구와 둔화 해제 시의 원격 이동 보정을 회귀 항목에 포함한다.
 
 - 사망·스턴·관전·리스폰 중에도 **쿨다운 시간 자체는 계속** 흐름.
 - 효과 지속 시 사망/경기 종료/월드 이동하면 효과·MID·오디오 버프를 정리.

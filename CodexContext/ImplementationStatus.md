@@ -1,8 +1,33 @@
+# 구현 상태와 검증 근거
+
+## P1-P9 체크포인트 구현과 검증
+
+기준은 `a3a6e0780ecbd86535cd667d8ea93354a82e0c9e`이다. 아래 표는 C++·Config·Git에서 확인한 사실과 에디터·실행에서 확인할 항목을 구분한다. P2 승인과 P3 조사 기록은 아래 각 절의 날짜와 기준 SHA를 따른다.
+
+| 범위 | 정적 근거 | 남은 확인 |
+|---|---|---|
+| 경기 시작과 결과 | `DMMatchGameMode`의 참가자 도착·준비 확인과 초기화 후 튜토리얼 게이트. P2 E3 설계 기록은 **120초**, 현재 C++ 기본값은 **90초**, 튜토리얼 기본값은 **300초**다. `DMMatchResultRules`는 전멸 승자를 단독 1위로 처리한다. | 도착 제한의 최종 설계 목표, 활성 BP 기본값, 결과 위젯 바인딩, Host/Client ACK |
+| 스킬과 이동 | `7f8c93f`에서 크기 증폭·이동 둔화, 조작 도움말, 미니맵과 새 HUD 경로가 추가됐다. 둔화는 `GetMaxSpeed`에 0.5를 적용한다. 크기 증폭은 캡슐 검사와 복구 경로를 가진다. | 활성 DA의 스킬 수치·IMC 매핑, 충돌 및 이동 예측 |
+| HUD와 연출 | `f587699`에 UI·Input·VFX 에셋 변경이 있다. 미니맵은 정규 진행 중 자기 Pawn과 자기 활성 BaseZone만 그린다. 정전에는 NPC 재질 페이드, 퀘스트에는 RunId별 표시·퇴장과 알림 경로가 있다. | WBP 바인딩·애니메이션, Niagara·재질의 실제 표현 및 복구 |
+| 오디오 | `65630c3`에 SoundWaves와 감쇠 에셋 `ATT_DMNear`, `ATT_DMMedium`, `ATT_DMFar`가 추가됐다. C++는 월드 위치 소리, 개인 2D 알림, 공용 UI 클릭과 캐릭터 소리를 구분한다. | BP 할당, 감쇠·믹스, 청취 범위와 중복 재생 |
+| 설정·P9 현지화 | **진행 중**. `DMLocalSettingsSubsystem`이 문화권을 적용하고 로컬 설정에 보관한다. `3eeb0d1`의 Gather/Compile INI, manifest, en/ko archive, CSV와 충돌 로그를 확인했다. 원본 문화권은 ko, 대상은 en·ko다. 기준 커밋에 추적된 `.locres`/`.locmeta`는 없다. | 최신 Gather 및 번역 적용, 화면 전환·글꼴 및 패키지 스테이징 |
+| NPC 실험 | `13abca7`에 이동 진단, `a3a6e07`에 P3-11r A144/B176 실험 맵이 있다. 공통 C++ 이동 기본값은 200/500, 규칙 DA 클래스 기본 배율은 15다. | 맵 배치·NavMesh, 참가 수별 성능 측정 |
+
+`Game.csv`의 영어 단어 수 0은 당시 Gather 스냅샷이다. `Game_Conflicts.txt`에는 `DMFrontend / SessionUnavailable` 키 충돌이 기록돼 있고 현재 소스는 참가 실패 분기에 `JoinSessionUnavailable`을 사용한다. 현재 Gather에서의 재현 여부는 미확인이다.
+
+최근 체크포인트는 기능 묶음으로 보존됐다. P1~P8 번호별 기능 대응은 확인 근거가 부족하다. 이 SHA의 빌드, 에디터 표현, PIE, Steam 멀티플레이, 패키징 및 성능은 미검증 상태다.
+
+아래 P0·P2·P3 절의 구현 확인 문장은 각 기록의 기준 시점을 따른다. 현행 결과 행과 전멸 순위는 위 체크포인트 표를 참고한다.
+
+과거 분석: [P0 Git 기준](ImplementationStatus.md#9-현재-git-저장소-분석--c3f94a9-기준) · [P2 승인 이력](ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13) · [P3 조사](ImplementationStatus.md#p3-9--최신-아키텍처-결정-및-구현-대조-2026-11-17).
+
 # P3-9 — 최신 아키텍처 결정 및 구현 대조 (2026-11-17)
 
 기준: Windows 개발 Worktree `C:\Unreal_My\Portfolio\DontMelt-P3-Work`, 브랜치 `work`, HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. **코드 정적 확인과 문서 동기화만 수행**했다. 빌드·Automation Test·PIE·Steam·에셋 에디터 검증은 미실행이다. 아래 최신 절이 P2 및 ZIP 분석 기록의 상충 내용과 구현 전 계획을 대체하며, 기존 기록은 당시 근거로 보존한다.
 
 ## 최신 결정
+
+이하 P3-9 항목은 해당 Windows Worktree의 조사 기록이다. 현행 C++와 검증 상태는 위 체크포인트 표를 기준으로 읽는다.
 
 - 기존 ADMJellyCharacterBase → ADMPlayerCharacter / ADMNPCCharacter 구조와 GameMode·GameState·PlayerState·PlayerController, Manager·Component 책임을 유지한다.
 - P3-7 Anonymous Presentation PoC/B안은 본 프로젝트에 통합하지 않는다. 별도 실험 브랜치·Worktree를 보존한다.
@@ -384,7 +409,7 @@ PIE/패키징: 인원, Host/Client, 네트워크 조건, 결과
 
 - 후속 확인은 기능별로 `설계 요구 / 사용자 승인 출처·범위 / 커밋·경로·클래스·함수·행 / 에셋 확인 / 컴파일·실행 조건·로그 / 미결정 사항` 여섯 축을 갱신한다.
 - 기존 기록을 삭제하거나 과거 테스트를 현재 테스트 결과로 바꾸지 않는다. 새로운 검증을 수행한 경우에만 결과와 기준 버전을 추가한다.
-- P0 승인 범위는 모듈 AGENTS, 이 폴더 README, 이 파일의 근거 정정뿐이다. P1~P3, C++/BP/에셋/Config 변경, Git add/commit/push/merge, 빌드·테스트는 실행하지 않는다.
+- 당시 P0 승인 범위는 모듈 AGENTS, 이 폴더 README, 이 파일의 근거 정정뿐이다. P1~P3, C++/BP/에셋/Config 변경, Git add/commit/push/merge, 빌드·테스트는 실행하지 않았다.
 - P0 완료 후 즉시 중단하고 변경 diff와 남은 F/G 및 P1 결정 항목을 보고한다. 다음 작업은 별도 승인 후 진행한다.
 
 
@@ -434,7 +459,7 @@ PIE/패키징: 인원, Host/Client, 네트워크 조건, 결과
 
 **세부 정책 미확정:** 새 중단 사유 Enum·RPC는 승인하지 않았다. 기존 사유·진단·메시지로 충분한지 먼저 검토한다. 90초보다30초 여유가 늘지만 실제 로딩 적정성은 측정 전 확인 불가다.
 
-**구현 변경 예상 범위 / 검증:** 기본120초는 C++과 일치한다. GameMode BP 오버라이드는 에셋 미검증이다. 미도착, 지연 도착, 타임아웃 경계, 이탈, Spawn/Possess 실패, 결과·로비 복귀를 향후 검증한다. 실행 미검증.
+**구현 변경 예상 범위 / 검증:** P2 E3의 설계 기록은 120초다. 기준 커밋에서 `StartingRosterTimeoutSeconds`의 C++ 기본값은 90초다. 활성 GameMode BP 값은 미확인이며 최종 설계 목표는 미확정이다. 미도착, 지연 도착, 타임아웃 경계, 이탈, Spawn/Possess 실패, 결과·로비 복귀를 향후 검증한다. 실행 미검증.
 
 ### E4 — 선택 휠과 지속형 Emote, 별도 FakeDeath
 

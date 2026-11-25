@@ -28,6 +28,8 @@ GameMode와 PlayerController가 커지면서 리스폰·관전·승패 규칙을
 
 ## 데이터 흐름
 
+크기 효과는 캐릭터의 `UDMSizeAmplificationComponent`에서 서버 전환과 복구를 처리한다. `UDMGameRootWidget`은 현재 Phase와 로컬 Pawn에 맞춰 HUD를 연결한다. 로컬 문화권은 `UDMLocalSettingsSubsystem`, 월드 오디오 사건은 `ADMMatchGameState`, 2D·3D 재생은 로컬 Controller가 담당한다.
+
 ```mermaid
 flowchart LR
     A[로컬 Enhanced Input] --> B[PlayerCharacter / PlayerController]
@@ -49,6 +51,8 @@ flowchart LR
 - 동시에 성립할 수 있는 상태(이동·행동·생존·상태 효과)는 서로 다른 축으로 둔다. `CharacterMovement`가 이동을, `UDMCharacterStateComponent`가 ActionState와 상태 효과 태그를, PlayerState가 LifeState를 소유한다.
 
 ## 관련 코드
+
+크기 전환과 문화권 상태의 소유자는 [DMSizeAmplificationComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMSizeAmplificationComponent.cpp) 및 [DMLocalSettingsSubsystem.cpp](../../Source/DontMelt/Private/Core/DMLocalSettingsSubsystem.cpp)에서 확인할 수 있다.
 
 - [DMMatchGameMode.cpp](../../Source/DontMelt/Private/Framework/Match/DMMatchGameMode.cpp) — `EvaluateMatchResult`, `TryFinishMatch`
 - [DMMatchGameState.cpp](../../Source/DontMelt/Private/Framework/Match/DMMatchGameState.cpp) — `TrySetMatchResult`, `GetLifetimeReplicatedProps`

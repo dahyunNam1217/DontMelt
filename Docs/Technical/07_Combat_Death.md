@@ -22,6 +22,8 @@
 
 ## 사망 경계
 
+전투 표현은 `UDMCharacterVFXComponent`의 공격·방어·스턴 위치 및 회전 설정을 사용한다. 방어 Niagara는 부착 후 종료 경로에서 정리되며, 스턴 진입에는 별도 캐릭터 사운드 경로가 있다. NPC의 오인 공격 느낌표는 서버 전투 판정과 구분된 표현이다. 에셋 할당·재생 타이밍과 원격 정리는 미검증이다.
+
 `ADMMatchGameMode::TryCommitPlayerDeath`와 `CommitDeathState`가 LifeState 전이의 원본이다. 사망이 확정되면 다음 순서로 정리한다.
 
 ```text
@@ -36,6 +38,8 @@ TryCommitPlayerDeath
 Ragdoll은 표현일 뿐이다. 메시가 쓰러졌다는 사실로 사망 상태가 정해지지 않는다. 감정표현의 가짜 죽음(FakeDeath)과 실제 사망도 서로 다른 상태다.
 
 ## 관련 코드
+
+연출과 상태 알림은 [DMCharacterVFXComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMCharacterVFXComponent.cpp) 및 [DMCharacterStateComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMCharacterStateComponent.cpp)에서 확인할 수 있다.
 
 - [DMCombatComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMCombatComponent.cpp) — `RequestAttack`, `ServerRequestAttack_Implementation`, `TryStartPredictedAttack`, `HandleAttackHitNotify`, `GatherValidAttackTargets`, `TryConsumeDefenseBlockAgainst`
 - [DMMatchGameMode.cpp](../../Source/DontMelt/Private/Framework/Match/DMMatchGameMode.cpp) — `TryCommitPlayerDeath`, `CommitDeathState`, `CleanupDeathInteractionAndRelic`

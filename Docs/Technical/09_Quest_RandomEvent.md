@@ -17,6 +17,8 @@ ADMMatchGameMode
 
 ## 퀘스트
 
+퀘스트 HUD는 RunId로 표시 수명을 구분하고 제시간 완료 시 순위를 표시한다. `BeginQuestExit`와 `FinishQuestExit`가 실행에 맞춰 퇴장 표현을 정리한다. 시작·기한·완료 2D 알림은 개인 Controller 경로이며 기존 실패 사이렌은 별도다.
+
 | 퀘스트 | 진행 방식 | 진행 이벤트 |
 |---|---|---|
 | Jump | 횟수 | 서버의 실제 점프 |
@@ -31,6 +33,8 @@ ADMMatchGameMode
 
 ## 랜덤 이벤트
 
+`ADMBlackoutController`는 유효한 정전 재질과 Scalar Parameter가 있으면 기존 NPC의 재질을 페이드하고, 정전 도중 생성된 NPC에도 표현을 적용한다. 종료 시 재질과 스폰 감시를 정리한다. 이벤트 시각과 게임 판정은 기존 서버 경로에서 관리한다. 머티리얼 적용과 전환 화면은 미검증이다.
+
 | 이벤트 | 진행 | 대상 |
 |---|---|---|
 | 정전 | 3초 예고, 2초 전 조명 깜빡임, 10초 | 월드 조명·시야 표현 |
@@ -39,9 +43,11 @@ ADMMatchGameMode
 
 - `TryScheduleEvent`는 시도 횟수, Playing 여부, 활성 이벤트·퀘스트를 확인한다. 같은 이벤트를 연속으로 고르지 않는다.
 - 예고와 실제 효과는 다른 타이머다. 효과 시작 순간에 Phase·퀘스트·전원 생존 조건을 다시 확인하고, 하나라도 어긋나면 취소한다.
-- 정전은 서버가 시작을 결정하고, `ADMBlackoutController`가 각 클라이언트에서 조명과 로컬 시야 조명을 처리한다. 서버 판단과 로컬 렌더 표현을 분리했다.
+- 정전은 서버가 시작을 결정하고, `ADMBlackoutController`가 각 클라이언트에서 조명, 로컬 시야 조명과 NPC 재질을 처리한다. 서버 판단과 로컬 렌더 표현을 분리했다.
 
 ## 관련 코드
+
+퀘스트 패널의 RunId와 퇴장 애니메이션 연결은 [DMQuestHUDWidget.cpp](../../Source/DontMelt/Private/UI/DMQuestHUDWidget.cpp)에 있다.
 
 - [DMQuestDirector.cpp](../../Source/DontMelt/Private/Quests/DMQuestDirector.cpp) — `StartPlaying`, `TryStartQuest`, `HandleQuestActionEvent`
 - [DMQuestProgressComponent.cpp](../../Source/DontMelt/Private/Quests/DMQuestProgressComponent.cpp) — `AddCountProgress`, `BeginDurationObservation`

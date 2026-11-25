@@ -42,6 +42,8 @@
 
 ## 필수 배치 계약
 
+미니맵은 월드 좌표 보정값과 활성 자기 BaseZone을 사용한다. 실제 맵 범위와 WBP 아이콘 위치는 에디터에서 맞춰 본다.
+
 | 배치 객체 | 조건 |
 |---|---|
 | 진영 BaseSlot 0~3 | 최대 4인용 서로 구분되는 진영. 맵과 일치하는 슬롯 ID 보유 |
@@ -65,6 +67,8 @@
 - 상대 식별을 허용하지 않는 외형·UI: 상자 진영 문양은 서로 다른 것과 플레이어 외형을 연결하지 않음.
 
 ## 성능·검증
+
+커밋 `a3a6e07`의 `Maps/Test/Experiments/P3_11r/MatchMap_T_A_144.umap`와 `MatchMap_T_B_176.umap`은 비교용 맵이다. 실제 NPC 배치, NavMesh 경로와 성능 결과는 미검증이다. [측정 계획](../../Docs/Performance/03_Profiling_Plan.md)
 
 - 60 NPC + 4 Player 기준 AI/NavMesh·CharacterMovement·Animation·Voice·Actor Replication 측정.
 - 스폰 위치 겹침, 시작 시 스냅샷 잠금, Physics Asset·Collision/Trace 채널, Pawn이 상호작용 LOS를 차단하지 않는지.

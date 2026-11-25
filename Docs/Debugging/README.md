@@ -1,6 +1,6 @@
 # Debugging — 문제 추적과 해결
 
-멀티플레이 동기화, Steam 세션과 맵 이동, 상태 수명주기, UI 입력, 빌드 환경에서 만난 문제를 정리했다. 모든 문서는 같은 순서로 쓴다.
+Steam 세션과 맵 이동 11건, 게임플레이 12건, UI 2건을 정리했다. 각 사례는 증상에서 출발해 원인을 좁히고, 채택한 해결책과 검증 방법을 설명한다.
 
 > **문제 요약 → 현상 → 원인 추적 → 해결(검토한 안과 채택 이유) → 검증 방법 → 정리**
 
@@ -55,12 +55,5 @@
 |---|---|
 | [01. 설정창 변경값 유실](UI/01_Settings_Unsaved_Changes.md) | 요청과 승인 분리, 기준값 비교 |
 | [02. 경기 시작 후 마우스 캡처](UI/02_InputMode_Restore.md) | 증상의 모양으로 원인 계층 찾기, 복구 가드 |
-
-## Build
-
-| 문서 | 핵심 |
-|---|---|
-| [01. 한글 경로 UBT 빌드 실패](Build/01_UBT_Git_Korean_Path.md) | Adaptive Non-Unity, `git status`, `core.quotepath` |
-| [02. 빌드·컴파일·Cook 오류 모음](Build/02_Compile_Link_Errors.md) | UHT, C3668, LNK2019/1104, BindWidget Cook 실패 |
 
 [Docs 목차](../README.md)

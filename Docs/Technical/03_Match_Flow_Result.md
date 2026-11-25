@@ -2,6 +2,8 @@
 
 ## Phase 전환
 
+서버는 승인 인원과 유효한 BaseSlot, 생존 Pawn과 준비 상태를 확인하고 필수 초기화를 수행한다. `StartingRosterTimeoutSeconds`의 기본값은 **90초**다. P2 E3 설계 기록은 **120초**이며 최종 설계 목표는 미확정이다. 필수 초기화가 끝난 뒤 `StartPreMatchTutorialGate`가 별도 기본 **300초** 제한을 사용한다.
+
 `EDMMatchPhase`는 정상 경로 `Waiting → Countdown → Playing → OvertimeIntro → Overtime → Finished`와 예외 종료 `Aborted`를 정의한다. 모든 전환은 `ADMMatchGameMode::TryTransitionPhase`를 거치고, 허용 여부는 한 함수에서 판단한다.
 
 ```cpp
@@ -31,7 +33,7 @@ bool ADMMatchGameMode::IsPhaseTransitionAllowed(const EDMMatchPhase FromPhase, c
 | 서버 처리 | 역할 |
 |---|---|
 | `TryFinalizeStartingRoster` | 참가자·리스폰 지점 검증 후 시작 인원, 유물 수, NPC 수를 스냅샷으로 고정 |
-| `HandleStartingRosterTimeout` | 승인된 참가자가 90초 안에 오지 않으면 중단 → 결과 화면 → 로비 복귀 |
+| `HandleStartingRosterTimeout` | 도착·준비·필수 초기화 미완료를 진단하고 내부 실패로 중단 (C++ 기본 90초). 종료 상태와 결과가 확정되면 결과 표시 후 자동 복귀를 예약하며, 실패하면 복구 경로로 진행 |
 | `StartCountdown` / `StartPlaying` | 인원과 Phase를 다시 확인하고 진행, 퀘스트·이벤트 시작 |
 | `HandleRegularTimeExpired` | 정규 시간 종료 평가 (단독 1위 승리 / 동률이면 연장전) |
 | `TryStartOvertimeIntro` / `StartOvertime` | 연장전 소개와 본 진행 |
@@ -55,6 +57,8 @@ bool ADMMatchGameMode::IsPhaseTransitionAllowed(const EDMMatchPhase FromPhase, c
 
 ## 결과 데이터
 
+`AcquiredRelicCount`는 획득 횟수다. 등록 수와 공동 순위를 별도로 표시하며 전멸 승자는 단독 1위다. 결과 캐시 이후 ACK를 보내는 경로와 결과 위젯의 표시 수명은 별개다. `TXT_AcquiredRelicCount`의 C++ 선언은 확인됐고 WBP 바인딩·결과 사운드 및 실제 ACK 수신은 미검증이다.
+
 `BuildFinalPlayerResults(EndReason, WinningBaseSlot)`가 참가자별 BaseSlot, **종료 시 등록 유물 수**(순위 기준), **누적 획득 수**(표시용), 킬 수를 기록한다.
 
 - 등록 수 내림차순 정렬, 같은 등록 수는 공동 순위 (4, 2, 2, 1 → 1, 2, 2, 4)
@@ -72,6 +76,8 @@ bool ADMMatchGameMode::IsPhaseTransitionAllowed(const EDMMatchPhase FromPhase, c
 | [결과표 데이터 분리](../Refactoring/03_MatchResult_Data.md) | 등록 수와 누적 획득 수 |
 
 ## 관련 코드
+
+도착·튜토리얼 기본값은 [DMMatchGameMode.h](../../Source/DontMelt/Public/Framework/Match/DMMatchGameMode.h), 획득 수 위젯 필드는 [DMPlayerResultRowWidget.h](../../Source/DontMelt/Public/UI/DMPlayerResultRowWidget.h)에서 확인할 수 있다.
 
 - [DMMatchTypes.h](../../Source/DontMelt/Public/Core/DMMatchTypes.h) — `EDMMatchPhase`, `FDMMatchPhaseState`, `FDMMatchResult`
 - [DMMatchGameMode.cpp](../../Source/DontMelt/Private/Framework/Match/DMMatchGameMode.cpp) — `TryTransitionPhase`, `HandleRegularTimeExpired`, `BuildFinalPlayerResults`, `TryFinishMatch`, `CommitServerTravel`

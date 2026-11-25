@@ -18,6 +18,8 @@
 
 ## 설계 판단
 
+최종 결과의 등록 수 공동 순위에는 전멸 승자의 단독 1위 예외가 있다. 현재 정렬 규칙은 [경기 흐름과 결과](../Technical/03_Match_Flow_Result.md)와 [전멸 승리 사례](../Debugging/Gameplay/09_EliminationVictory_Ranking.md)에 연결한다.
+
 | 결정 | 이유 |
 |---|---|
 | 새 필드 `AcquiredRelicCount` 추가, `RelicCount`는 등록 수로 유지 | 기존 필드의 의미를 바꾸면 이를 쓰는 코드와 BP가 조용히 잘못된 값을 쓴다. 새 의미에는 새 이름을 준다 |

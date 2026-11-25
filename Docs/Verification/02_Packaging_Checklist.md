@@ -11,6 +11,8 @@
 
 ## 경기 맵 데이터
 
+P3-11r A144/B176은 비교용 맵이다. 패키지 대상 맵과 구분하고, NavMesh 및 NPC 동선은 각 실험 조건에서 별도로 확인한다.
+
 | 확인 항목 | 코드가 요구하는 조건 (근거 함수) | 어긋날 때 |
 |---|---|---|
 | NPC 스폰 지점 | `DM_NPCSpawn` 태그 TargetPoint ≥ 인원 × `DefaultNPCMultiplier` (`InitializePopulation`). 기본 배율 15라 4인이면 60개 | 경기 시작 안 됨 |
@@ -28,6 +30,8 @@
 
 ## Steam·패키징 환경
 
+P9 현지화는 진행 중이다. en/ko Gather·Compile 설정과 중간 산출물을 확인했고, 리소스 생성·스테이징과 실제 패키지 언어 전환은 확인 항목이다. 증거 기준은 [기준 체크포인트의 구현·검증 상태](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에 있다. [현지화 파이프라인과 산출물](../../CodexContext/FeatureSpecs/17_Localization.md)
+
 | 항목 | 내용 | 어긋날 때 |
 |---|---|---|
 | NetDriver 설정 | `DefaultEngine.ini`에 `!NetDriverDefinitions=ClearArray` 후 SteamNetDriver·DemoNetDriver 정의 | 호스트가 IP 드라이버로 열려 `steam.` 주소 접속 실패 |
@@ -41,7 +45,7 @@
 
 | 항목 | 내용 | 어긋날 때 |
 |---|---|---|
-| WBP 바인딩 | 모든 WBP Compile/Save 후 Cook 로그 확인 (`BindWidget` 이름·타입) | [Cook 실패](../Debugging/Build/02_Compile_Link_Errors.md) |
+| WBP 바인딩 | 모든 WBP Compile/Save 후 Cook 로그 확인 (`BindWidget` 이름·타입) | 바인딩 불일치 및 Cook 오류 확인 |
 | 결과·로비 Row | `PlayerResultRowClass`, `PlayerRowWidgetClass` 지정 | 데이터는 있는데 목록이 빔 |
 | 한글 폰트 | C++ `SetText`로 바뀌는 문자열까지 글리프 지원 | 런타임 텍스트만 깨짐 |
 | 공격 몽타주 Notify | 판정 Notify를 Branching Point로 | 서버에서 원격 캐릭터의 판정 타이밍이 흔들림 |

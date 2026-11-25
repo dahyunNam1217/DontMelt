@@ -59,6 +59,8 @@
 
 ## 오인 공격 VFX 추가 요구
 
+현재 방어 Niagara의 부착·해제와 스턴 진입 사운드가 연결돼 있다. 느낌표의 StaticMesh·BP 훅과 실제 장착의 검증 경계는 [시각 연출 명세](16_Visual_Effects_And_Presentation.md)를 따른다.
+
 사용자가 이후 제안한 **3D 느낌표 Static Mesh**는 기존 오인 공격 판정·스턴 확정 후 Cosmetic BP 연출로 실행할 수 있다. 어떤 클라이언트가 봐야 하는지 명세 확인 필요. **현재 해당 표현의 구현 여부 미검증**. [16 시각 연출](16_Visual_Effects_And_Presentation.md) 참조.
 
 ## 완료 기준

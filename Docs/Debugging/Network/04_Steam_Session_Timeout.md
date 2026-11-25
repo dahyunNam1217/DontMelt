@@ -90,6 +90,8 @@ void UDMOnlineSessionSubsystem::HandleOperationTimeout()
 
 ## 정리
 
+후속 P3-4에서는 복구 차단 중 로비 시작 잠금을 유지하고 대기 콜백과 타이머를 정리한다. 현재 세션 실패의 재요청 조건은 [Steam 세션 구현](../../Technical/02_Steam_Session_Lobby.md)에 있다.
+
 - 외부 콜백에만 의존하는 상태는 **콜백이 오지 않는 경우**를 기준으로 설계해야 한다.
 - 타임아웃은 상태를 **소유한 객체 안**에 둬야 그 상태가 실제로 풀린다.
 

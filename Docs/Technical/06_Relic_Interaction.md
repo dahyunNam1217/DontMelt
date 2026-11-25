@@ -9,6 +9,8 @@
 
 ## 요청부터 Commit까지
 
+상자 열기·닫기와 유물 획득·드롭은 위치 소리 경로를 사용한다. 등록 성공은 해당 Controller에 개인 등록음을 보낸다. `RefreshWorldPresentation`은 유물의 표현을 갱신하며, 소리나 표현이 서버 Commit을 대신하지 않는다.
+
 ```mermaid
 sequenceDiagram
     participant C as 소유 Client
@@ -50,6 +52,8 @@ sequenceDiagram
 
 ## 실패와 취소
 
+`CloseChestInteractionLocal`은 열었던 상자를 서버에 통지하고 로컬 조회 상태를 비운다. `ServerCloseChestInteraction`은 사운드용으로 기록된 상자와 동일할 때만 닫기 이벤트를 내보낸다. 기존 예약과 취소의 서버 판정은 독립적이다.
+
 - **실패**(거리 이탈, 시야 차단)와 **시스템 취소**(Phase 변경)를 구분한다. 등록 실패에는 Drop 페널티가 있으므로, 플레이어 잘못이 아닌 취소에는 페널티를 주지 않는다. → [Phase 변경 문제](../Debugging/Gameplay/04_Interaction_PhaseChange.md)
 - 시야 판정은 사이를 지나가는 Pawn을 차단으로 보지 않는다. → [LOS 문제](../Debugging/Gameplay/03_Interaction_LOS_Pawn.md)
 - 수동 드롭은 줍기와 같은 Visibility 채널로 전방을 검사해 벽 앞에 놓는다. → [벽 앞 드롭](../Debugging/Gameplay/05_Relic_Drop_Wall.md)
@@ -57,6 +61,8 @@ sequenceDiagram
 - 바닥이 없는 위치에 떨어진 유물은 1초 주기 검사로 지정된 복구 지점으로 옮긴다.
 
 ## 관련 코드
+
+표현은 [DMRelic.cpp](../../Source/DontMelt/Private/Relic/DMRelic.cpp), 상자 닫기와 사운드는 [DMMatchPlayerController.cpp](../../Source/DontMelt/Private/Framework/Match/DMMatchPlayerController.cpp)에서 확인할 수 있다.
 
 - [DMInteractionComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMInteractionComponent.cpp) — `ServerRequestInteraction_Implementation`, `ServerValidateActiveInteraction`, `BeginServerInteraction`, `HasServerLineOfSightTo`
 - [DMRelicManager.cpp](../../Source/DontMelt/Private/Relic/DMRelicManager.cpp) — `ResolveInteractionRequest`, `TryAcquireInteractionReservation`, `TryCommitRelicAcquisition`, `TryCommitRelicDeposit`, `TryDropCarriedRelic`

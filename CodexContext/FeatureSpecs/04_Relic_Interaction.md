@@ -10,7 +10,7 @@
 
 **설계 승인:** 결과표 유물 열은 경기 중 누적 획득 횟수, 최종 순위는 종료 시 등록 유물 수를 사용하며 동률 공동 순위를 허용한다. 두 통계를 별도 관리하고 표시 변경으로 서버 승리 판정을 바꾸지 않는다.
 
-**구현 확인 / 부분 구현:** `ADMRelicManager::TryCommitRelicAcquisition` → `ADMMatchPlayerState::IncrementAcquiredRelicCount` → `ADMMatchGameMode::BuildFinalPlayerResults`로 누적 통계를 보관한다. `FDMMatchResultEntry`의 `AcquiredRelicCount`와 `RelicCount`가 분리되어 있다. 그러나 `UDMPlayerResultRowWidget::SetResultEntry`는 현재 `RelicCount`를 표시하므로 목표 표시와 불일치한다. 성공 Pickup/Steal Commit마다 증가하는 것이 현재 동작이다.
+**P2 당시 기록:** 획득 수 열은 미반영 상태였다. `ADMRelicManager::TryCommitRelicAcquisition`이 성공하면 `ADMMatchPlayerState::IncrementAcquiredRelicCount`로 누적 획득 수를 기록하고 `ADMMatchGameMode::BuildFinalPlayerResults`가 등록 수와 획득 수를 구분해 결과를 구성한다. **현재 C++:** `RelicCount`는 경기 종료 시 등록 수, `AcquiredRelicCount`는 경기 중 누적 획득 수다. `SetResultEntry`는 두 값을 각각 `TXT_RelicCount`와 `TXT_AcquiredRelicCount`에 설정한다. 실제 WBP 바인딩은 미검증이다.
 
 책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../ImplementationStatus.md)의 E1 절을 함께 읽는다.
 
@@ -43,6 +43,8 @@ Carried → Dropped      [수동 드롭 / 사망]
 
 ## 요청 흐름
 
+서버 Commit 뒤 획득은 위치 소리, 등록은 소유 Controller의 개인음으로 전달된다. 드롭음은 최종 위치에서 재생하는 경로를 사용한다. `DMRelic::RefreshWorldPresentation`은 별도로 외형을 갱신한다.
+
 1. F로 필드/드롭 유물에 대해 Pickup 2초 Hold; F로 상자 열기는 즉시(2초 Hold 아님); Space Hold 2초로 Deposit/Steal; Q로 드롭.
 2. 로컬 UI 후보는 Sphere+수평 Facing+거리(기본 250cm)+카메라 LOS로 표시. **안내는 판정 아님**.
 3. `ServerRequestInteraction(Target, RequestId)`에서 유효성 확인. 과거·중복 RequestId 거절.
@@ -51,6 +53,8 @@ Carried → Dropped      [수동 드롭 / 사망]
 6. Commit 직전에 다시 유효성 검사하고 상태 변경 → 예약/속도 제한 정리. 등록 성공 뒤 GameMode 종료 평가.
 
 ## 취소·실패
+
+상자 닫기는 로컬 상태를 비우면서 서버에 열었던 상자를 통지한다. 서버는 기록된 상자와 일치할 때 닫기 소리를 보낸다. 기존 예약·취소와 청취 처리의 권한을 분리한다.
 
 - 키 해제/모드 해제 = 사용자 취소, Phase 전환·경기 종료 = 시스템 취소, 거리·LOS·상태 위반 = 실패. **실패 페널티를 시스템 취소에 적용하지 않는다.**
 - 상대 Pawn이 트레이스 사이에 끼어도 LOS 가림이 아님; 지형은 차단.

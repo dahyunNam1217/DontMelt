@@ -2,6 +2,8 @@
 
 ## UI가 게임 판정을 하지 않는 구조
 
+Root는 일반 진행에서 자기 Pawn과 활성 자기 BaseZone의 미니맵 표시를 허용한다. 조작 도움말은 일반 진행·연장전 중 메뉴·상자·스킬 선택이 닫힌 동안 사용할 수 있다. 위젯 연결과 타이머의 세부 흐름은 [경기 HUD 표현](GameplayHUDPresentation.md)에 정리했다.
+
 경기 UI는 `UDMGameRootWidget` 아래에 기능 위젯을 레이어별로 둔다. UI는 승패나 유물 소유권을 계산하지 않고, GameState·소유 PlayerState·캐릭터 Component가 내보낸 상태를 읽기만 한다. 상태가 바뀌면 Delegate·RepNotify로 갱신하고, 시간이 흐르는 표시만 짧은 타이머로 갱신한다.
 
 ```text
@@ -27,6 +29,8 @@ WBP_DMGameRoot
 
 ## 수명 관리
 
+미니맵은 비활성화·파괴 시 로컬 갱신 타이머를 정리한다. 퀘스트 HUD는 RunId로 완료 및 퇴장 애니메이션을 관리하고, 상태 HUD는 소유 상태와 Controller의 개인 효과 알림을 읽는다. WBP 연결은 에디터 확인이 필요하다.
+
 - `ADMMatchPlayerController`가 로컬 `WBP_DMGameRoot`를 한 번 만들고 정리한다.
 - Pawn이나 PlayerState가 바뀌면 이전 Delegate를 해제하고 새 데이터 원본으로 다시 연결한다. 리스폰 뒤 이전 Pawn을 잡고 있지 않게 한다.
 - 모달(상자·대상 선택), 메뉴, 관전, 결과는 레이어 가시성으로 제어한다. 결과 화면은 다른 모든 경기 UI보다 우선한다.
@@ -40,6 +44,8 @@ WBP_DMGameRoot
 설정창의 변경 감지와 닫기 흐름은 [설정창 변경값 유실 문제](../Debugging/UI/01_Settings_Unsaved_Changes.md)에서 다뤘다.
 
 ## 관련 코드
+
+보조 위젯과 표시 경로는 [DMMinimapWidget.cpp](../../Source/DontMelt/Private/UI/DMMinimapWidget.cpp), [DMControlsHelpWidget.cpp](../../Source/DontMelt/Private/UI/DMControlsHelpWidget.cpp), [DMStatusHUDWidget.cpp](../../Source/DontMelt/Private/UI/DMStatusHUDWidget.cpp), [DMQuestHUDWidget.cpp](../../Source/DontMelt/Private/UI/DMQuestHUDWidget.cpp)에 있다.
 
 - [DMGameRootWidget.cpp](../../Source/DontMelt/Private/UI/DMGameRootWidget.cpp) — `NativeConstruct`, `RefreshRootVisibility`, `RefreshInteractionPrompt`
 - [DMMatchResultWidget.cpp](../../Source/DontMelt/Private/UI/DMMatchResultWidget.cpp)

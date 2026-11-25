@@ -2,7 +2,7 @@
 
 ## P3-9 정정 — 2026-11-17
 
-기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래 원문은 개발 이력으로 보존한다. 최신 상태는 이 절과 [구현 현황](../../CodexContext/ImplementationStatus.md)을 따른다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
+기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래는 당시의 P3 개발 기록이다. 현재 구현과 검증 상태는 [기준 체크포인트](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에서 확인할 수 있다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
 
 - **확정 범위:** 정상 게임 화면의 위장 일관성은 유지하되, 네트워크 메타데이터 수준의 플레이어 정체 은폐를 필수 요구사항에서 제외한다. P3-7 Anonymous Presentation PoC/B안은 통합하지 않는다.
 - 기존 Character·Framework·Manager·Component 구조와 Server Authority·최소 복제를 유지한다. 클래스/소유 관계 등으로 플레이어 여부를 추론할 수 없다고 보장하지 않는다. Listen Host는 권위 서버를 실행하는 신뢰 경계다.
@@ -11,6 +11,8 @@
 - P3-4는 로비 복구 차단 시 Delegate·Timer를 정리하고 시작 잠금을 유지한다. 로그 안내 존재와 실제 사용자 UI 안내·Steam 복구 성공은 구분한다.
 
 ## 데이터 분류
+
+상태 태그와 투명·둔화·크기 효과 타이밍은 `COND_OwnerOnly`다. 관련 클라이언트에는 일반 복제 `SizeState`와 투명·스턴 표현 플래그로 필요한 표현을 전달한다. 지속 상태는 늦게 Relevant해지는 프록시에서도 표현을 다시 구성할 수 있다.
 
 서버가 원본을 가진 값마다 **누구에게 보여야 하는가**를 먼저 정했다. GameState는 공통 경기 정보, PlayerState는 참가자 상태, 각 Component는 자기 기능의 세부 상태를 맡는다.
 
@@ -29,6 +31,8 @@
 다른 플레이어의 `LifeState`를 공개하지 않는 것은 정보 제한 정책과 연결된다. 관전 중인 사망자가 다른 사람의 생존 여부로 정체를 추리하지 못하게 한다.
 
 ## RPC 사용 기준
+
+발소리 증폭의 피격 경고는 대상 Controller의 Client RPC다. 유물·상자의 위치 소리는 GameState에서 종류와 위치를 Multicast하고, 등록 등 개인 알림은 해당 Controller에서 2D로 재생한다.
 
 | 종류 | 용도 | 예 |
 |---|---|---|
@@ -50,6 +54,8 @@ Listen Server 호스트는 OnRep을 받지 않는다. 서버 Setter에서 값을
 `ADMRelicManager`는 `bReplicates=false`, Tick 비활성화다. 공용 정보는 개별 유물 Actor나 GameState를 통해 공개한다. 상자의 등록 수는 전역 복제하지 않고, 상자를 연 플레이어에게만 서버 응답 스냅샷으로 준다.
 
 ## 관련 코드
+
+크기 상태의 복제 선언과 복구는 [DMSizeAmplificationComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMSizeAmplificationComponent.cpp)에 있다.
 
 - [DMMatchGameState.cpp](../../Source/DontMelt/Private/Framework/Match/DMMatchGameState.cpp) — `GetLifetimeReplicatedProps`
 - [DMMatchPlayerState.cpp](../../Source/DontMelt/Private/Framework/Match/DMMatchPlayerState.cpp) — `GetLifetimeReplicatedProps`

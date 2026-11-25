@@ -30,6 +30,8 @@
 
 ## 설정 분리
 
+문화권은 로컬 SaveGame의 en/ko 코드로 적용한다. 그래픽은 UE 설정을 사용하며 창 모드·해상도 변경에는 미리 적용·확정·복원 경로가 있다. P9의 번역 및 패키지 검증은 진행 중이다.
+
 | 데이터 | 소유자·저장 |
 |---|---|
 | 해상도/창모드/그래픽 | `UGameUserSettings` / 엔진 설정 |
@@ -40,6 +42,8 @@
 타이틀/로비/인게임에서 동일 Settings Widget(탭 Graphics/Audio/Controls/Language/Voice). **현재 화면 입력값과 마지막 저장값**을 비교하여 변경 유무를 판단; 원래대로 돌려놓으면 변경 없는 것으로 간주. 저장 안 한 채 탭 이동/닫기 시 `적용 / 변경 취소 / 계속 수정`. 해상도·창모드 변경은 **15초 확인 타이머**, 미응답 시 이전 값 복구. 로컬 설정을 PlayerState로 복제하지 않는다.
 
 ## 접속 실패 분류
+
+실패 안내 `FText`는 로컬 표시 경로에 해당하며 Steam 복구 완료 여부와 분리한다. [설정과 복구 구현](../../Docs/Technical/15_Settings_NetworkRecovery.md)
 
 `UDMGameInstance`가 NetworkFailure/TravelFailure를 수신하되 **의도한 나가기**, **ServerTravel 중 기존 연결 종료**, **이미 경기 월드에서 끊김**, **PendingNetGame 연결 중 오류**, **맵 Travel 실패**를 구분.
 

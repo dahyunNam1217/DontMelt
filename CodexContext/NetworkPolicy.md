@@ -79,6 +79,8 @@ sequenceDiagram
 
 ## 3. 데이터 배포 매트릭스
 
+현 C++에서 `ActiveStatusTags`, `InvisibleTiming`, `SlowMovementTiming`, `SizeAmplificationTiming`은 `COND_OwnerOnly`다. `SizeState`와 투명·스턴 표현 플래그는 관련 클라이언트가 외형을 복원하는 데 쓰이는 별도 복제 데이터다.
+
 | 데이터 | 서버 원본 | 전송 | 유의사항 |
 |---|---|---|---|
 | Phase, 종료 서버 시각, 공개 이벤트/퀘스트, 최종 결과 | MatchGameMode→MatchGameState | **모든 클라이언트** | 허용된 공개 내용만 |
@@ -107,6 +109,8 @@ sequenceDiagram
 | 결과/Travel | ResultId 일치, ACK 중복/늦은 도착 무시, Host 권한 및 서버 이동 결정 |
 
 ## 5. RPC 신뢰성과 지연 처리
+
+발소리 증폭 경고는 영향을 받은 플레이어의 Controller에만 도착한다. 경고가 받은 시작·종료 시각은 해당 HUD에서 사용한다. 월드 오디오는 GameState의 사건 Multicast로 위치와 종류를 전달하며, UI 개인 알림과 별도 경로다.
 
 - `Reliable`은 반드시 처리돼야 하는 **저빈도 요청/승인**에 제한한다. 이동·아날로그 입력·매 프레임 VFX 값 등을 Reliable RPC로 반복 전송하지 않는다.
 - 단발성 표현은 소유자 Client RPC 또는 필요한 대상의 Cosmetic 이벤트로 전달. **늦게 Relevant해진 관찰자에게도 지속 상태를 보여야 한다면** Multicast만으로 표현하지 말고 복제된 관찰 상태를 사용한다. 예: 투명화, 퀘스트 실패 사이렌.
@@ -137,6 +141,8 @@ sequenceDiagram
 - 별도 물리/표현 상태 복제를 최소화. 사망 Ragdoll은 시작 알림 후 클라이언트 로컬 시뮬레이션.
 
 ## 9. 필수 테스트
+
+회귀 확인 항목에 늦게 Relevant해진 프록시의 크기, 소유자 타이머, 대상 외 플레이어의 경고 미수신, 사망·트래블 뒤 정리를 포함한다. 기준 SHA의 다중 클라이언트 실행 결과는 미검증이다.
 
 1. PIE Listen Server + 2/3/4인 Host/Client 각각 공격·방어·유물·쿨다운·승리의 **서버 권한** 확인.
 2. 높은 지연·패킷 손실 환경에서 RequestId·중복 Commit·Phase 경계·결과 ACK 처리 확인.

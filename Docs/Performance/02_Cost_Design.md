@@ -36,6 +36,8 @@ const int32 NearbyReactionLimit = FMath::Min(MaxNearbyResponderCount, NearbyCand
 
 ## 복제 범위
 
+크기 전환은 관련 클라이언트에 `SizeState`를 복제하고 효과 타이밍은 소유자만 받는다. 원격 보정과 복제 비용은 실측 항목이다.
+
 | 데이터 | 복제 정책 | 이유 |
 |---|---|---|
 | 공격·방어 쿨다운 종료 서버 시각 | `COND_OwnerOnly` | 본인 HUD와 입력 판정에만 필요 |
@@ -81,6 +83,8 @@ if (bSavedWantsToSprint)
 타이머도 공짜는 아니다. 0.1초 타이머는 초당 약 10회 실행된다. 그래서 상호작용 검증 타이머는 **진행 중인 상호작용에만** 돌고, 끝나면 바로 해제한다. 젤리 AnimInstance의 `NativeUpdateAnimation()`처럼 매 프레임 계산이 필요한 곳은 Tick 대상으로 남겼다. 프로젝트 전체를 Tick-free라고 보지 않는다.
 
 ## UI 갱신
+
+미니맵의 로컬 위치 갱신은 활성 표현에 연결되고 비활성화와 파괴에서 정리된다. 정전 NPC 재질은 효과 구간에만 페이드 타이머와 스폰 감시를 사용한다. 크기 전환·복구와 함께 프로파일러에서 활성 구간의 비용을 분리한다.
 
 상태가 바뀔 때는 Delegate·OnRep으로 갱신하고, **시간이 흐르는 표시만** 필요한 동안 타이머로 갱신한다.
 

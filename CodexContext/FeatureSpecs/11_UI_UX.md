@@ -22,7 +22,7 @@
 
 **설계 승인:** 결과표 유물 열은 경기 중 누적 획득 횟수, 최종 순위는 종료 시 등록 유물 수를 사용하며 동률 공동 순위를 허용한다. 두 통계를 별도 관리하고 표시 변경으로 서버 승리 판정을 바꾸지 않는다.
 
-**구현 확인 / 부분 구현:** `ADMRelicManager::TryCommitRelicAcquisition` → `ADMMatchPlayerState::IncrementAcquiredRelicCount` → `ADMMatchGameMode::BuildFinalPlayerResults`로 누적 통계를 보관한다. `FDMMatchResultEntry`의 `AcquiredRelicCount`와 `RelicCount`가 분리되어 있다. 그러나 `UDMPlayerResultRowWidget::SetResultEntry`는 현재 `RelicCount`를 표시하므로 목표 표시와 불일치한다. 성공 Pickup/Steal Commit마다 증가하는 것이 현재 동작이다.
+**P2 당시 기록:** 획득 수 열은 미반영 상태였다. `ADMRelicManager::TryCommitRelicAcquisition`이 성공하면 `ADMMatchPlayerState::IncrementAcquiredRelicCount`로 누적 획득 수를 기록하고 `ADMMatchGameMode::BuildFinalPlayerResults`가 등록 수와 획득 수를 구분해 결과를 구성한다. **현재 C++:** `RelicCount`는 경기 종료 시 등록 수, `AcquiredRelicCount`는 경기 중 누적 획득 수다. `SetResultEntry`는 두 값을 각각 `TXT_RelicCount`와 `TXT_AcquiredRelicCount`에 설정한다. 실제 WBP 바인딩은 미검증이다.
 
 책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../ImplementationStatus.md)의 E1 절을 함께 읽는다.
 
@@ -30,7 +30,7 @@
 
 **설계 승인:** 일반 종료는 최종 등록 수 순위다. 전멸 승리에서는 등록 수와 무관하게 승자를 단독1위로 고정하고, 나머지는 2위부터 등록 수 기준 공동 순위를 부여한다. 승리 배너와 결과표의 승자 의미가 모순되지 않아야 한다.
 
-**구현 확인 / 부분 구현:** `DMMatchResultRules::SortAndRankResults`는 등록 수 내림차순이며 같은 등록 수에서만 승자를 우선한다. `ADMMatchGameMode::BuildFinalPlayerResults`가 이 함수를 호출한다. 따라서 등록 수가 적은 전멸 승자가 결과표1위가 아닐 수 있다. 현재 함수는 종료 사유별 승자 고정 계약을 받지 않는다.
+**P2 당시 기록:** 정렬은 등록 수를 우선해 전멸 승자의 단독 1위를 보장하지 않았다. **현재 C++:** 서버가 전멸 승리로 경기를 종료하면 `BuildFinalPlayerResults`가 `SortAndRankResults`에 단독 1위 옵션을 전달한다. 나머지 참가자는 등록 수 내림차순으로 정렬하고, 동률에는 공동 순위를 부여한다. 실제 WBP 표시는 미검증이다.
 
 책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../ImplementationStatus.md)의 E2 절을 함께 읽는다.
 
@@ -59,6 +59,8 @@
 `ADMMatchPlayerController`가 소유 클라이언트에 `WBP_DMGameRoot` 한 번 생성/정리한다. `UDMGameRootWidget` 및 자식 `UDM*Widget` C++ 클래스는 GameState/PlayerState/Component/Local Subsystem 이벤트의 **표현만** 담당. UI에서 유물 등록 수·승패·기절 판정을 다시 하지 않는다.
 
 ## 레이어
+
+미니맵은 `Playing`에서 자기 Pawn과 활성 자기 BaseZone을 표시한다. 상세 도움말은 메뉴·상자·스킬 선택이 아닌 허용 상황에서 입력을 누르는 동안 표시한다. 실제 WBP 레이어 연결은 확인 대상이다.
 
 ```text
 WBP_DMGameRoot
@@ -91,6 +93,8 @@ WBP_DMGameRoot
 **문서 충돌:** 원본 `UIDesign.md`/기술 문서에는 RandomEventHUD를 이름·설명·진행바로 적었지만 이후 UI 대화에는 **설명 텍스트 하나만** 유지하려는 지시가 있었다. 현재 Widget 에셋/C++를 확인하지 못했으므로 `ImplementationStatus.md`에 검증 필요로 표시. 다른 UI들도 실제 BindWidget 구성 확인 전 임의 필드 추가하지 않는다.
 
 ## 갱신·수명
+
+미니맵은 활성 UI에서 로컬 위치 갱신을 수행하고 비활성화에서 타이머를 해제한다. 퀘스트는 RunId로 완료·퇴장 수명을 관리하고 상태 HUD는 소유자 타이밍과 자기 Controller의 경고를 사용한다.
 
 - GameState RepNotify, Component Delegate 갱신. 쿨다운 표시·상호작용 후보만 **필요할 때 타이머**(문서상 InteractionPrompt 기본 0.2초)로 갱신. Actor 전수 탐색/서버 폴링 금지.
 - Pawn 교체 시 이전 Pawn/PlayerState Delegate 해제 후 새 원본 바인딩.

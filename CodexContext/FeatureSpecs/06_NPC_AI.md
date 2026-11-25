@@ -53,6 +53,8 @@ NPC와 플레이어는 같은 젤리 캐릭터 기반 메시·이동·애니메�
 
 ## 확정 수치
 
+현재 C++ 공통 이동 기본값은 200/500, 규칙 DA 클래스 기본 배율은 15다. 4인 기본 산식은 60이다. NPC 이동 발소리는 캐릭터 오디오 경로에서 재생하지 않는다. 활성 DA·BP와 맵 배치 수치는 에디터 확인 범위다.
+
 - `DefaultNPCMultiplier=15`, 2인=30/3인=45/4인=60명 (구 10배/40명보다 최신 목표).
 - Director 허용 범위 1~60(기술 문서 기록). 맵은 4인용 최소 **60개** 이상의 `DM_NPCSpawn` TargetPoint 필요.
 - 행동 가중치: Walk 40, RelicApproach 20, Sprint 15, Idle 10, Jump 5. 확률은 이 가중치로 정규화하되 DataTable `DT_NPCBehaviorProfiles`/RuleDataAsset 실존 값 확인.
@@ -71,6 +73,8 @@ NPC와 플레이어는 같은 젤리 캐릭터 기반 메시·이동·애니메�
 NPC는 유물·상자에 접근한 뒤 머물 수 있지만 Pickup, Deposit, Steal은 금지. 가짜 공격·가짜 죽음은 NPC 일반 행동에 포함하지 않는다. 스폰 지점은 매치마다 셔플하여 2인 등 인원이 적을 때 동일 지역만 채워지는 편향을 피한다. 필수 스폰 실패 시 부분 생성 개체를 회수하고 초기화를 실패로 처리한다.
 
 ## 성능 제약
+
+정전에서 NPC 재질을 페이드하고 새 스폰에 적용하는 경로는 [이벤트 명세](09_Random_Events.md)에 있다. P3-11r 실험 맵은 추적돼 있으며 현재 AI·NavMesh 성능 측정은 대기 중이다.
 
 - Behavior Tree/StateTree/개체 Tick 대신 Timer·MoveCompleted 사용.
 - NPC **40명** 실측: AI 평균 약 0.12~0.25ms, Move/CharacterMovement 비용은 실행 프로세스에 크게 영향. 60명 측정 결과는 아직 증거 없음.

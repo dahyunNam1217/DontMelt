@@ -2,6 +2,8 @@
 
 ## 설정의 소유자
 
+`SetLanguageCode`는 en/ko로 정규화한다. 문화권 적용에 성공하면 메모리의 SaveGame 객체를 갱신하고, 설정 적용 경로의 `SaveSettings`가 디스크에 저장한다. 해상도와 창 모드는 UE 그래픽 설정에서 관리하며, 확인이 필요한 변경은 미리 적용 후 확정하거나 되돌린다. 오디오 설정은 `DMGameInstance`의 월드 적용 경로를 거친다.
+
 | 설정 | 소유자 | 저장 |
 |---|---|---|
 | 해상도·창 모드·그래픽 | `UGameUserSettings` | 엔진 설정 파일 |
@@ -11,6 +13,8 @@
 로컬 설정은 PlayerState로 복제하지 않는다. 서버는 다른 사람의 화면이나 음량을 알 필요가 없다. 해상도·창 모드를 바꾸면 15초 확인창을 띄우고, 응답이 없으면 이전 설정으로 되돌린다. 탭 이동·닫기 때 저장하지 않은 변경값을 처리하는 흐름은 [설정창 문제](../Debugging/UI/01_Settings_Unsaved_Changes.md)에 정리했다.
 
 ## 장애 복구
+
+일부 Steam 실패 안내는 현지화 가능한 `FText`를 사용한다. 이 변경은 접속 복구 상태 머신의 성공 결과와 별개다. P9은 Gather 설정·중간 산출물까지 확인한 진행 중 상태다. [기준 체크포인트의 구현·검증 상태](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)
 
 `UDMGameInstance`는 `Init`에서 Network·Travel 실패 Delegate를 연결하고, 실패를 상황별로 구분한다.
 
@@ -27,6 +31,8 @@
 방 퇴장(`RequestLeaveOnlineRoom`)은 세션 해제를 기다리되 8초 상한을 둔다. 세션 시스템 자체에도 작업별 30초 타임아웃이 있어, 화면 이동과 세션 상태가 따로 풀린다.
 
 ## 관련 코드
+
+적용과 화면 모드 미리보기는 [DMSettingsWidget.cpp](../../Source/DontMelt/Private/UI/DMSettingsWidget.cpp)에 있다. 파이프라인의 입력 및 출력은 [Game_Gather.ini](../../Config/Localization/Game_Gather.ini)와 [Game_Compile.ini](../../Config/Localization/Game_Compile.ini)에서 확인할 수 있다.
 
 - [DMLocalSettingsSubsystem.cpp](../../Source/DontMelt/Private/Core/DMLocalSettingsSubsystem.cpp) — `SetAudioVolumes`, `SetMouseSensitivity`, `SaveSettings`
 - [DMGameInstance.cpp](../../Source/DontMelt/Private/Core/DMGameInstance.cpp) — `RequestLeaveOnlineRoom`, `HandleNetworkFailure`, `StartLocalFailureRecovery`, `HandleTravelFailure`, `HandlePostLoadMap`

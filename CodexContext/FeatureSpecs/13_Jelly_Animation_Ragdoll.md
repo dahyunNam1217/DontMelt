@@ -40,6 +40,8 @@
 
 ## Bone 변형 계약
 
+현재 스프링은 프레임 간격을 나눠 적분하고 회전·각속도를 제한한다. 점프음은 소유 Pawn의 로컬 경로와 서버의 원격 Multicast를 구분한다. 크기 효과와 카메라·캡슐 전환은 [입력과 이동](03_Character_Input_Movement_Pose.md)에 연결한다.
+
 ```text
 SM_Locomotion → DefaultSlot → Pose Blend → Cache Pose
 → LocalToComponentSpace → Transform(Modify)Bone × 8
@@ -61,6 +63,8 @@ SM_Locomotion → DefaultSlot → Pose Blend → Cache Pose
 사망 확정 이후 `StartDeathRagdollPresentation`→필요한 클라이언트 `MulticastStartDeathRagdollPresentation`. Mesh 물리를 시뮬레이션하고 Pawn/Visibility는 차단하지 않고 월드 충돌만 유지하여 전투 LOS를 망치지 않는다. 표현용 물리 위치는 게임 서버의 생명·리스폰 판정을 변경하지 않는다. Ragdoll의 정확한 위치 동기화 여부와 서버 적용 경로는 코드 확인.
 
 ## 성능/에셋 검증
+
+실제 AnimBP 본 연결, 크기 복구 후 자세·카메라, 원격 스턴과 점프 타이밍은 현 기준에서 미검증이다.
 
 문서에 공용 `riggedcapsuleman` Mesh, 위치 `(0,0,-88)`, 회전 `(0,0,-90)`, Scale `(0.45,0.45,0.45)`가 기록되어 있지만, 현재 Blueprint/asset 기준값 미검증. `AlwaysTickPose` 및 URO/Notify 최적화가 발소리 정보를 제거하지 않는지 확인.
 

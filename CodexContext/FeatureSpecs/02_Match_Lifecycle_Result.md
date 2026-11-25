@@ -22,7 +22,7 @@
 
 **설계 승인:** 결과표 유물 열은 경기 중 누적 획득 횟수, 최종 순위는 종료 시 등록 유물 수를 사용하며 동률 공동 순위를 허용한다. 두 통계를 별도 관리하고 표시 변경으로 서버 승리 판정을 바꾸지 않는다.
 
-**구현 확인 / 부분 구현:** `ADMRelicManager::TryCommitRelicAcquisition` → `ADMMatchPlayerState::IncrementAcquiredRelicCount` → `ADMMatchGameMode::BuildFinalPlayerResults`로 누적 통계를 보관한다. `FDMMatchResultEntry`의 `AcquiredRelicCount`와 `RelicCount`가 분리되어 있다. 그러나 `UDMPlayerResultRowWidget::SetResultEntry`는 현재 `RelicCount`를 표시하므로 목표 표시와 불일치한다. 성공 Pickup/Steal Commit마다 증가하는 것이 현재 동작이다.
+**P2 당시 기록:** 획득 수 열은 미반영 상태였다. `ADMRelicManager::TryCommitRelicAcquisition`이 성공하면 `ADMMatchPlayerState::IncrementAcquiredRelicCount`로 누적 획득 수를 기록하고 `ADMMatchGameMode::BuildFinalPlayerResults`가 등록 수와 획득 수를 구분해 결과를 구성한다. **현재 C++:** `RelicCount`는 경기 종료 시 등록 수, `AcquiredRelicCount`는 경기 중 누적 획득 수다. `SetResultEntry`는 두 값을 각각 `TXT_RelicCount`와 `TXT_AcquiredRelicCount`에 설정한다. 실제 WBP 바인딩은 미검증이다.
 
 책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../ImplementationStatus.md)의 E1 절을 함께 읽는다.
 
@@ -30,7 +30,7 @@
 
 **설계 승인:** 일반 종료는 최종 등록 수 순위다. 전멸 승리에서는 등록 수와 무관하게 승자를 단독1위로 고정하고, 나머지는 2위부터 등록 수 기준 공동 순위를 부여한다. 승리 배너와 결과표의 승자 의미가 모순되지 않아야 한다.
 
-**구현 확인 / 부분 구현:** `DMMatchResultRules::SortAndRankResults`는 등록 수 내림차순이며 같은 등록 수에서만 승자를 우선한다. `ADMMatchGameMode::BuildFinalPlayerResults`가 이 함수를 호출한다. 따라서 등록 수가 적은 전멸 승자가 결과표1위가 아닐 수 있다. 현재 함수는 종료 사유별 승자 고정 계약을 받지 않는다.
+**P2 당시 기록:** 정렬은 등록 수를 우선해 전멸 승자의 단독 1위를 보장하지 않았다. **현재 C++:** 서버가 전멸 승리로 경기를 종료하면 `BuildFinalPlayerResults`가 `SortAndRankResults`에 단독 1위 옵션을 전달한다. 나머지 참가자는 등록 수 내림차순으로 정렬하고, 동률에는 공동 순위를 부여한다. 실제 WBP 표시는 미검증이다.
 
 책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../ImplementationStatus.md)의 E2 절을 함께 읽는다.
 
@@ -60,6 +60,8 @@
 
 ## Phase 계약
 
+E3 승인 기록 **120초**, 현 C++ 도착 제한 **90초**, 최종 설계 목표 미확정을 구분한다. 필수 시스템 초기화 후 별도 튜토리얼 제한의 C++ 기본값은 **300초**다.
+
 ```text
 Waiting → Countdown → Playing → (OvertimeIntro → Overtime) → Finished
 Waiting / Countdown / Playing / OvertimeIntro / Overtime → Aborted
@@ -74,6 +76,8 @@ Finished / Aborted : 종료 상태, 매치 내 후속 전이 없음
 - 둘 이상의 이벤트 동시 발생 시 서버의 먼저 성공한 Commit과 단일 결과 확정 경로에 따른다.
 
 ## 결과 구조
+
+등록 수는 순위 계산에, 획득 수는 별도 통계에 사용한다. 전멸 승자는 단독 1위다. 결과 행의 `TXT_AcquiredRelicCount`는 C++ 선언에서 확인했으며 실제 WBP 연결과 실환경 ACK는 미검증이다.
 
 - 참가자 스냅샷의 **등록 수**로 등수 정렬; 동점 공동 순위(4,2,2,1 → 1,2,2,4).
 - 결과표에는 **누적 획득 수**를 유물 열에 표시; **킬 수**는 순위 결정에 사용하지 않는다.

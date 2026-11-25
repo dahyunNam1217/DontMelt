@@ -2,25 +2,19 @@
 
 ## P2 승인 동기화 — 2026-11-13
 
-이번 사용자 P2 요청의 명시 범위만 **설계 승인**으로 채택한다. 과거 승인으로 소급하지 않는다. 기준 HEAD는 `914173a`이며 구현 사실·설계 승인·에셋 적용·실행 검증은 별개다. 상세 근거와 미결정 사항은 [ImplementationStatus 10절](../../CodexContext/ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)을 따른다.
-
-**아래 기존 본문과의 관계:** 이 절 뒤의 기존 본문은 삭제하지 않고 이전 설계·조사 기록으로 보존한다. E1~E10과 충돌하는 값·완료/승인/미확인 표현은 이 절과 중앙10절이 대체한다. 특히90초·Walk300·NPC×10/40·NPC 발소리·3요소 이벤트 HUD·타임아웃 즉시 재요청은 최신 목표가 아니다. E1~E10 밖의 항목을 이번 승인으로 일괄 확정하지 않는다.
+2026-11-13의 P2 설계 변경에서 아래 항목을 확정했다. 결정의 근거와 당시 승인 범위는 [설계 이력](../../CodexContext/ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)에, 기준 커밋의 C++ 구현과 미검증 범위는 [구현 상태](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에 정리했다. [경기 규칙](#2-핵심-규칙)과 [경기 진행](#3-경기-진행)에서 게임 흐름을 확인할 수 있다.
 
 ### E1 — 결과 통계와 순위 분리
 
 **설계 승인:** 결과표 유물 열은 경기 중 누적 획득 횟수, 최종 순위는 종료 시 등록 유물 수를 사용하며 동률 공동 순위를 허용한다. 두 통계를 별도 관리하고 표시 변경으로 서버 승리 판정을 바꾸지 않는다.
 
-**구현 확인 / 부분 구현:** `ADMRelicManager::TryCommitRelicAcquisition` → `ADMMatchPlayerState::IncrementAcquiredRelicCount` → `ADMMatchGameMode::BuildFinalPlayerResults`로 누적 통계를 보관한다. `FDMMatchResultEntry`의 `AcquiredRelicCount`와 `RelicCount`가 분리되어 있다. 그러나 `UDMPlayerResultRowWidget::SetResultEntry`는 현재 `RelicCount`를 표시하므로 목표 표시와 불일치한다. 성공 Pickup/Steal Commit마다 증가하는 것이 현재 동작이다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E1 절을 함께 읽는다.
+**P2 당시 기록:** 획득 수 열은 미반영 상태였다. `ADMRelicManager::TryCommitRelicAcquisition`이 성공하면 `ADMMatchPlayerState::IncrementAcquiredRelicCount`로 누적 획득 수를 기록하고 `ADMMatchGameMode::BuildFinalPlayerResults`가 등록 수와 획득 수를 구분해 결과를 구성한다. **현재 C++:** `RelicCount`는 경기 종료 시 등록 수, `AcquiredRelicCount`는 경기 중 누적 획득 수다. `SetResultEntry`는 두 값을 각각 `TXT_RelicCount`와 `TXT_AcquiredRelicCount`에 설정한다. 실제 WBP 바인딩은 미검증이다.
 
 ### E2 — 전멸 승자 단독 1위
 
 **설계 승인:** 일반 종료는 최종 등록 수 순위다. 전멸 승리에서는 등록 수와 무관하게 승자를 단독1위로 고정하고, 나머지는 2위부터 등록 수 기준 공동 순위를 부여한다. 승리 배너와 결과표의 승자 의미가 모순되지 않아야 한다.
 
-**구현 확인 / 부분 구현:** `DMMatchResultRules::SortAndRankResults`는 등록 수 내림차순이며 같은 등록 수에서만 승자를 우선한다. `ADMMatchGameMode::BuildFinalPlayerResults`가 이 함수를 호출한다. 따라서 등록 수가 적은 전멸 승자가 결과표1위가 아닐 수 있다. 현재 함수는 종료 사유별 승자 고정 계약을 받지 않는다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E2 절을 함께 읽는다.
+**P2 당시 기록:** 정렬은 등록 수를 우선해 전멸 승자의 단독 1위를 보장하지 않았다. **현재 C++:** 서버가 전멸 승리로 경기를 종료하면 `BuildFinalPlayerResults`가 `SortAndRankResults`에 단독 1위 옵션을 전달한다. 나머지 참가자는 등록 수 내림차순으로 정렬하고, 동률에는 공동 순위를 부여한다. 실제 WBP 표시는 미검증이다.
 
 ### E3 — 참가자 도착 대기 120초
 
@@ -28,15 +22,11 @@
 
 **구현 확인:** `ADMMatchGameMode::StartPlay`가 아직 명단이 확정되지 않은 Waiting에서 타이머를 설정한다. 클라이언트 로딩 시작 시점 기준이 아니다. `HandleStartingNewPlayer_Implementation`은 부모 Spawn/Possess 후 Pawn/Controller를 확인한다. `IsStartingRosterComplete`는 기대 인원, 유효 PlayerState, 유효·고유 BaseSlot, Alive, Pawn·Controller·PlayerState 연결을 확인한다. `TryFinalizeStartingRoster`는 스폰 지점 및 NPC/유물/퀘스트/이벤트 초기화 후 도착 타이머를 해제하고 튜토리얼 게이트로 이동한다.
 
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E3 절을 함께 읽는다.
-
 ### E4 — 선택 휠과 지속형 Emote, 별도 FakeDeath
 
 **설계 승인:** 휠은 Emote 선택 UI, 홀드는 선택한 지속형 Emote 실행·유지 방식이다. 입력 종료·취소·상태 전환에서 종료하고, Emote 퀘스트 시작·지속·종료 계약을 유지한다. FakeDeath는 별도 동작 기능으로 관리한다. 기존 문서의 휠 항목 목록만으로 FakeDeath를 일반 Emote와 같은 구현으로 확정하지 않는다.
 
 **구현 확인 / 부분 구현:** `ADMPlayerCharacter::BindPoseAndEmoteInput`, `InputEmoteStarted`, `InputEmoteCompleted`는 기본 `DefaultEmoteId=Scream` 홀드 요청을 연결한다. `UDMCharacterStateComponent::RequestBeginEmote_Implementation` / `RequestEndEmote_Implementation`과 서버 행동·퀘스트 이벤트 경로가 있다. C++ 입력 설정에서 선택 휠 연결은 확인하지 못했다. FakeDeath enum·제한·Anim 분기는 있으나 명시적인 C++ 진입 호출 및 완전한 해제 경로는 확인하지 못했다. BP 전체 미구현이라고 단정하지 않는다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E4 절을 함께 읽는다.
 
 ### E5 — 공통 이동 속도와 NPC 목표 수
 
@@ -44,23 +34,17 @@
 
 **구현 확인:** `ADMJellyCharacterBase`의 WalkSpeed/SprintSpeed 기본값은200/500이며 `PostInitializeComponents`와 이동 컴포넌트 `GetMaxSpeed` 경로에서 사용한다. `UDMMatchRuleDataAsset::DefaultNPCMultiplier` 기본15, `ADMMatchGameMode::TryFinalizeStartingRoster`의 인원×배율 스냅샷, `UDMNPCPopulationDirector::InitializePopulation`의 최대60 검증을 확인했다.
 
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E5 절을 함께 읽는다.
-
 ### E6 — NPC 이동 발소리 금지
 
 **설계 승인:** NPC는 이동 발소리를 내지 않고 PlayerCharacter만 이동 발소리를 낸다. 사용자가 직접 확인한 의도이며 정책 자체를 재설계하지 않는다. NPC 비명·웃음·이벤트 사운드는 별개다. 이동 발소리는 플레이어 식별 단서가 될 수 있고 발소리 증폭·투명화 표현과 연결된다.
 
 **구현 확인:** `UDMCharacterAudioComponent::CanPlayFootstepLocally`는 소유자가 `ADMPlayerCharacter`인 경우만 허용한다. `HandleFootstepNotify`는 이 검사를 거쳐 로컬 재생하며 발소리 전용 RPC를 추가하지 않는다. 조사한 C++ 발소리 경로에서 NPC 허용 우회는 확인하지 못했다.
 
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E6 절을 함께 읽는다.
-
 ### E9-A — 전원 튜토리얼과 300초 제한
 
 **설계 승인:** 경기 시작 전 전원 완료, 기존300초 제한, 완료·실패·시간 초과·이탈 구분, 서버 최종 판정을 채택한다.
 
-**구현 확인:** `ADMMatchGameMode::StartPreMatchTutorialGate`는 확정 명단을 기준으로 완료 집합·300초 타이머·Client 튜토리얼 표시를 관리하고 완료 후 Countdown으로 진행한다. 표시 실패·시간 초과는 현재 내부 실패 중단 경로다. 도착120초 타이머와 별도다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E9-A 절을 함께 읽는다.
+**구현 확인:** `ADMMatchGameMode::StartPreMatchTutorialGate`는 확정 명단을 기준으로 완료 집합·300초 타이머·Client 튜토리얼 표시를 관리하고 완료 후 Countdown으로 진행한다. 표시 실패·시간 초과는 현재 내부 실패 중단 경로다. 참가자 도착 타이머와 별도다. P2의 도착 설계 기록은 120초이며 현재 C++ 기본값은 90초다.
 
 ### E9-B — 서버 리스폰 재시도 상한
 
@@ -68,15 +52,11 @@
 
 **구현 확인:** `UDMRespawnCoordinator::HandleRespawnTimerExpired` / `ScheduleRespawnRetry`가 재시도와 연결·보호 적용을 관리한다. 기본 재시도 간격은 GameMode의1초이며 최소0.05초 보정이 있다. 최대3회 소진 시 현재 코드는 전체 경기 내부 실패 중단을 요청한다.
 
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E9-B 절을 함께 읽는다.
-
 ### E9-C — 플레이어 실제 사망에 대한 NPC 비웃음
 
 **설계 승인:** 실제 플레이어 사망 후 주변 NPC 반응과 비웃음 표현을 유지한다. Panic/Stun·행동 상태 충돌을 막고 다른 참가자에게 제공하는 사망 위치·상황 단서를 고려한다. 단순한 장식 효과로 취급하지 않는다.
 
 **구현 확인:** GameMode 사망 처리 → `UDMNPCPopulationDirector::HandleNearbyPlayerDeath` → `ADMJellyAIController::TryStartDeathMockingReaction`의 행동 전환·이동 중지·Laugh 요청 경로가 있다. 규칙 DataAsset C++ 기본값은 반경800cm, 최대3명, 지속2.5초다. 이는 현재 구현 기준값이며 실제 에셋 적용 수치와 재생 성공을 의미하지 않는다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E9-C 절을 함께 읽는다.
 
 ### E10 — 정보 공개 범주와 Listen Host 신뢰 경계
 
@@ -89,8 +69,6 @@
 | 시전자 전용 | 기능에 필요한 최소 정보의 예외 명세 | ClientSetFootstepAmplifyPresentation은 대상 PlayerState를 전달. 현재 전달 사실이며 해당 참조 전체의 최종 예외 승인은 시스템 명세 확인 필요 |
 | 관전자 예외 | 관전 정책상 필요한 범위만 | ClientBeginSpectatorSequence의 Context·KillerPawn 등은 현재 구현. 숨길 정보와 예외 범위를 별도 확인 |
 | 서버 전용 | 원본 판정·불필요한 신원/운반 관계 | RelicManager 비복제, 스킬 서버 대상 선정. 클라이언트가 대상 Actor 대신 선택 정책을 제출 |
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E10 절을 함께 읽는다.
 
 **검증 상태:** BP/DataAsset/Animation 실제 적용은 에셋 미검증, 빌드·PIE·Steam은 실행 미검증이다. 아래 완료 기준은 향후 검증 시나리오이며 통과 기록이 아니다. C++·WBP·Config 변경은 이번 문서 승인에 포함되지 않는다. [공통 게임 규칙](../../CodexContext/GameplayRules.md) · [네트워크 정책](../../CodexContext/NetworkPolicy.md)를 상호 참조한다.
 
@@ -136,7 +114,7 @@
 → 결과 → 재경기 또는 로비 복귀
 ```
 
-경기 시작 때 참가자 수, 진영, 유물 수, 승리 필요 개수, NPC 수를 확정한다. 경기 도중 누군가 나가도 이 값을 다시 계산하지 않는다. 호스트 이전과 경기 중 재접속은 지원하지 않는다. 승인된 참가자가 90초 안에 경기 맵에 도착하지 않으면 경기를 중단하고 로비로 돌아간다.
+경기 시작 때 참가자 수, 진영, 유물 수, 승리 필요 개수, NPC 수를 확정한다. 경기 도중 누군가 나가도 이 값을 다시 계산하지 않는다. 호스트 이전과 경기 중 재접속은 지원하지 않는다. 현재 C++는 도착·준비 단계에 기본 90초를 사용하고 실패하면 중단 경로로 들어간다. 기존 E3의 설계 승인 기록은 120초이며 최종 설계 목표는 미확정이다.
 
 ## 4. 유물과 승리
 
@@ -173,11 +151,15 @@
 
 ## 6. 이동·자세·전투
 
+현재 공통 C++ 기본값은 걷기 200, 달리기 500이다. 이동 둔화가 적용되면 최대 속도가 절반으로 줄어든다. 실제 캐릭터 BP 적용값은 확인이 필요하다.
+
 기본 이동은 걷기, 달리기, 점프다. 1인칭에서는 카메라 방향에 몸을 맞추고, 3인칭에서는 이동 방향을 바라본다. 자세 모드에서는 몸 방향을 고정하고 선택한 자세 그대로 미끄러지듯 움직인다. 자세는 기본 → 납작 → 웅크리기 → 대자 → 기본 순으로 바뀐다. 자세 중에는 공격·방어·달리기·스킬·상호작용을 쓸 수 없다.
 
 공격은 HP를 깎지 않고 한 번의 유효 타격으로 쓰러뜨린다. 전방 범위·거리·지형 시야 조건에 맞는 대상을 모두 판정할 수 있다. 판정은 공격 애니메이션의 타격 시점에 서버가 하므로, 누르자마자 상대가 쓰러지지 않는다. 방어는 정면 한정으로 첫 유효 타격 한 번을 막는다. NPC를 공격하면 상대는 무사하고 공격자가 기절한다.
 
 ## 7. 스킬
+
+현재 C++에는 아래 설계 기록의 세 스킬 외에 크기 증폭과 이동 둔화의 대상 선택·실행 경로가 있다. 새 스킬의 세부 목표 수치와 실제 DataAsset 값은 별도 확인한다.
 
 | 스킬 | 쿨다운 | 효과 | 대상 |
 |---|---:|---|---|
@@ -211,6 +193,8 @@ NPC는 정체를 숨기기 위한 군중이다. 서버가 걷기·정지·달리
 
 ## 11. 화면·연출
 
+현재 일반 진행 HUD에는 자신의 위치와 자기 베이스를 표시하는 미니맵이 있다. 기본 조작 안내와 누르는 동안 여는 상세 도움말은 별도 패널이다. 표시 조건과 위젯의 실제 배치는 [경기 UI 구현](../Technical/11_UMG_UI.md)에서 구분한다.
+
 - 주요 화면: 타이틀, 메인 메뉴, 로비, 경기 HUD, 상자 패널, 스킬 대상 선택, 퀘스트·이벤트, 관전, 경기 결과, 공통 설정.
 - 경기 결과: 승패 제목, 참가자 이름·등수·누적 획득 유물 수·킬 수. 등수는 종료 시 등록 수 기준이고 공동 순위를 허용한다. 전멸 승리일 때만 승자를 1위로 고정한다.
 - 후반 공개: 정규 경기 종료 60초 전 3초 동안 모든 유물 위치를 공개하고, 연장전 시작 전 5초 동안 진영 문양별 등록 수를 보여 준다.
@@ -221,6 +205,8 @@ NPC는 정체를 숨기기 위한 군중이다. 서버가 걷기·정지·달리
 마녀의 저택과 젤리 마을을 중심으로 한 `Horror Mansion Map`이다. 사탕·설탕 구조물, 진영별 상자, 공용 유물 구역, NPC 보행 공간을 배치한다. 진영은 BaseSlot 0~3으로 구분하고 서로 다른 문양을 쓴다. 문양과 캐릭터의 정체는 직접 연결되지 않는다. 한 진영에 시작 위치·부활 위치·상자를 둔다. 라운드 중 여닫히는 문이나 통로 봉쇄는 넣지 않는다.
 
 ## 13. 랜덤 이벤트
+
+정전은 조명 외에 로컬 NPC 재질의 페이드와 복구를 포함한다. 이동·상호작용 등 서버 규칙은 기존 정전 설계의 경계를 유지한다.
 
 | 이벤트 | 진행 | 대상 |
 |---|---|---|
@@ -243,6 +229,8 @@ NPC는 정체를 숨기기 위한 군중이다. 서버가 걷기·정지·달리
 
 ## 15. 사운드·애니메이션 범위
 
+상자와 유물의 위치 소리는 주변 플레이에서 단서를 제공한다. 개인 등록·퀘스트 알림은 로컬 2D 경로, 공용 버튼 클릭은 UI 경로를 사용한다. 실제 재생과 감쇠는 플레이테스트 항목이다.
+
 | 범주 | 내용 |
 |---|---|
 | 캐릭터 | 발소리, 걷기·달리기, 공격·방어, 기절, 비명, 감정표현 |
@@ -254,6 +242,8 @@ NPC는 정체를 숨기기 위한 군중이다. 서버가 걷기·정지·달리
 애니메이션은 Idle/Walk/Sprint/Jump, 공격·방어, 자세, Dance/Laugh/Cheer, FakeDeath, 실제 사망 Ragdoll, 리스폰이다. 상자 열기·유물 습득·등록·드롭에는 별도 몽타주를 쓰지 않고 Idle을 유지한다.
 
 ## 16. 플레이테스트 관측 항목
+
+현재 체크포인트의 추가 확인 항목은 정전 중 새 NPC의 표시·복구, 크기 전환 충돌, 미니맵의 공개 범위, 위치 소리와 개인 알림의 청취 범위다.
 
 | 영역 | 수집할 값 |
 |---|---|

@@ -6,6 +6,8 @@
 
 ## 인구 확정
 
+규칙 DA 클래스의 기본 배율은 **15**다. 4인 기본 산식은 60이며 실제 배치와 활성 DA 값은 에디터 확인 대상이다. 공통 C++ 이동 기본값은 Walk 200, Sprint 500이고 NPC 이동 발소리는 캐릭터 오디오 경로에서 허용하지 않는다.
+
 경기 시작 인원 `StartingPlayerCountSnapshot`에 `DefaultNPCMultiplier`를 곱해 NPC 수를 정한다. 기본 배율은 15이고, Director는 1~60명을 허용한다.
 
 | 플레이어 | 목표 NPC 수 (배율 15) |
@@ -39,9 +41,13 @@
 
 ## 성능 판단
 
+`13abca7`의 이동 진단은 일반 테스트 맵에 적용된다. `a3a6e07`의 P3-11r 실험 맵은 별도 실행·수집 경로를 확인해야 한다. [개발 PIE와 NPC 이동 진단](../Verification/P3_NPCMovementDiagnostics.md) 정전 중 재질 처리와 스폰 훅은 [랜덤 이벤트](09_Quest_RandomEvent.md)에 정리했다. 실험 맵 품질과 성능은 현 체크포인트에서 미측정이다.
+
 AI Tick을 끈 것만으로 NPC 60명의 비용이 낮다고 볼 수 없다. NPC는 이동하며 스켈레탈 애니메이션을 재생한다. 측정에서 AI 비용은 작았고, CharacterMovement·애니메이션·이동 복제가 주요 후보로 남았다. 자세한 판단 과정은 [NPC 성능 분석](../Performance/01_NPC_Performance_Analysis.md)에 정리했다.
 
 ## 관련 코드
+
+NPC의 표현 진입점은 [DMNPCCharacter.cpp](../../Source/DontMelt/Private/Characters/DMNPCCharacter.cpp), 이동 진단은 [DMNPCMovementDiagnostics.cpp](../../Source/DontMelt/Private/Development/DMNPCMovementDiagnostics.cpp)에 있다.
 
 - [DMMatchRuleDataAsset.h](../../Source/DontMelt/Public/Data/DMMatchRuleDataAsset.h) — `DefaultNPCMultiplier`, 반응 반경·최대 응답 수
 - [DMNPCPopulationDirector.cpp](../../Source/DontMelt/Private/AI/DMNPCPopulationDirector.cpp) — `InitializePopulation`, `CollectSpawnPoints`, `HandleWrongTargetAttack`

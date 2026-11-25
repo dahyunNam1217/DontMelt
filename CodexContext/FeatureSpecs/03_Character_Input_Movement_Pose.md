@@ -41,6 +41,8 @@
 
 ## 입력 컨텍스트
 
+현재 캐릭터 바인딩에는 크기 증폭·이동 둔화와 조작 도움말 Action이 있다. 도움말은 눌림과 해제로 상세 표시를 제어한다. 활성 IMC의 키는 별도 확인한다.
+
 | Context | 키/목적 |
 |---|---|
 | `IMC_Gameplay` | WASD, Look, Space, Shift, F, Q, LMB, E, R, T, 1/2/3, Esc |
@@ -54,6 +56,8 @@
 `bIgnoreAllPressedKeysUntilRelease`를 사용해 Context 전환 당시 눌린 F·Space 등이 새 Context의 이벤트로 재처리되지 않게 한다. `PawnClientRestart`/Pawn 변경/메뉴 닫기 시 Mapping·마우스 캡처·GameOnly 입력 모드를 복구한다.
 
 ## 책임과 이동 예측
+
+공통 C++ 기본값은 걷기 200, 달리기 500이다. 둔화는 `GetMaxSpeed`에 0.5를 적용하고, 크기 컴포넌트는 캡슐 전환·복구 중 자율 프록시 예측을 정리한다. BP 적용값과 원격 보정은 검증 조건이다.
 
 - `ADMJellyCharacterBase` — 공용 Mesh/이동/오디오/애니메이션.
 - `ADMPlayerCharacter` — 플레이어 입력 바인딩, 1·3인칭 카메라, Component 호출.

@@ -2,6 +2,8 @@
 
 ## 입력 Context를 나눈 이유
 
+`DMPlayerCharacter`는 `ShowControlsAction`과 새 대상 스킬 Action을 연결한다. 도움말은 Controller에서 Started와 해제를 받아 누르는 동안 상세 패널을 표시한다. 실제 키 매핑은 활성 IMC에서 확인해야 한다.
+
 상자를 연 상태에서 같은 `F`가 다시 상자를 여닫거나, 스킬 대상 선택 중 이동·공격 입력이 섞이지 않도록 Mapping Context를 상황별로 나눴다. `ADMPlayerCharacter`가 로컬 Context의 진입과 해제를 직접 관리한다.
 
 | 입력 상태 | 담당 함수 | 받는 입력 |
@@ -16,6 +18,8 @@ Context를 바꿀 때 `bIgnoreAllPressedKeysUntilRelease = true`를 쓴다. 상�
 
 ## Sprint를 이동 예측에 넣기
 
+Sprint 의도는 기존 SavedMove 압축 플래그를 쓴다. 둔화 상태에서는 `GetMaxSpeed`가 최대 속도에 **0.5**를 적용한다. 크기 효과는 캡슐 전환·복구 시 소유 클라이언트의 이동 예측을 정리한다. Host/Client 보정은 실행 검증 항목이다. [서버 캡슐 판정과 프록시 예측 복구](CharacterSizeAmplification.md)
+
 달리기 전환을 별도 Reliable RPC로 보내고 bool을 복제하는 대신, CharacterMovement의 예측 경로에 넣었다.
 
 - `UDMCharacterMovementComponent`가 `FSavedMove_Character`를 상속한 `FSavedMove_DMCharacter`에 `bSavedWantsToSprint`를 저장한다.
@@ -26,6 +30,8 @@ Context를 바꿀 때 `bIgnoreAllPressedKeysUntilRelease = true`를 쓴다. 상�
 서버 보정(Correction)이 일어나도 Sprint 의도가 SavedMove와 함께 재생되므로, 클라이언트 예측과 서버 판정이 같은 입력으로 계산된다. 다른 클라이언트의 달리기 애니메이션은 관측 속도로 판단한다.
 
 ## 관련 코드
+
+캡슐 전환과 `ResetAutonomousProxyPrediction`은 [DMSizeAmplificationComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMSizeAmplificationComponent.cpp)에서 확인할 수 있다.
 
 - [DMPlayerCharacter.cpp](../../Source/DontMelt/Private/Characters/DMPlayerCharacter.cpp) — `PawnClientRestart`, `EnterChestInteractionInputMode`, `EnterSkillTargetingInputMode`
 - [DMCharacterMovementComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMCharacterMovementComponent.cpp) — `GetCompressedFlags`, `CanCombineWith`, `UpdateFromCompressedFlags`, `GetMaxSpeed`

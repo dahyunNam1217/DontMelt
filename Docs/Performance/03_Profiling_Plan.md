@@ -2,7 +2,7 @@
 
 ## P3-9 정정 — 2026-11-17
 
-기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래 원문은 개발 이력으로 보존한다. 최신 상태는 이 절과 [구현 현황](../../CodexContext/ImplementationStatus.md)을 따른다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
+기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래는 당시의 P3 개발 기록이다. 현재 구현과 검증 상태는 [기준 체크포인트](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에서 확인할 수 있다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
 
 30/45/60NPC는 목표이며 실제 배율·스폰 수와60NPC 성능은 미검증이다. 아래 NPC 발소리 타이밍·군집 발소리 최적화 후보는 과거 전제다. 현재 NPC 이동 발소리는 금지하고 Player 발소리·증폭·투명화 청각 단서를 보존한다. NPC Anim 최적화 시에는 자세·이동·반응과 화면 위장 일관성을 확인한다. 모든 측정은 계획이며 이번에 실행하지 않았다.
 
@@ -34,6 +34,15 @@ NPC 수는 C++ 기본 배율 15 기준으로 2인 30명, 3인 45명, 4인 60명�
 | PERF-07 | 다수 동시 사망·Ragdoll | Physics Thread, Body 수, Collision |
 | PERF-08 | 4인 음성 대화 | Network, Audio |
 | PERF-09 | 결과 화면 → 로비 복귀 3회 반복 | 레벨 전환, GC, Widget·Timer 잔존 |
+
+### P3-11r 실험 맵 비교
+
+| 구분 | 고정 조건 | 수집 항목 |
+|---|---|---|
+| `MatchMap_T_A_144` / `MatchMap_T_B_176` | 같은 UE5.5 빌드, 같은 하드웨어와 그래픽 설정, 동일 참가 수·동선 | NPC 실제 배치, 이동 정체·경로 실패, 게임 스레드 프레임 시간 |
+| 호스트 / 원격 클라이언트 | 동일 맵과 동일 2인·4인 조건을 각각 반복 | AI와 CharacterMovement 비용, 복제·애니메이션, 프레임 시간 분포 |
+
+개발 자동 진입은 `MatchMap_T`의 단일 프로세스 2인 Listen Server PIE에서 `DMDevPIE=1`과 `ExpectedPlayers=2`를 요구한다. TSV 진단도 `MatchMap_T`의 PIE Listen Server·Client로 제한된다. A/B 맵과 4인 비교는 별도 실행·수집 경로를 확인한 뒤 진행한다. 맵 이름의 접미사는 배치 수나 실측 결과를 뜻하지 않는다. 현재 실행·측정 결과는 미확인이다. [개발 PIE와 이동 진단](../Verification/P3_NPCMovementDiagnostics.md)
 
 ## 도구
 

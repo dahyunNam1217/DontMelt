@@ -2,25 +2,19 @@
 
 ## P2 승인 동기화 — 2026-11-13
 
-이번 사용자 P2 요청의 명시 범위만 **설계 승인**으로 채택한다. 과거 승인으로 소급하지 않는다. 기준 HEAD는 `914173a`이며 구현 사실·설계 승인·에셋 적용·실행 검증은 별개다. 상세 근거와 미결정 사항은 [ImplementationStatus 10절](../../CodexContext/ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)을 따른다.
-
-**아래 기존 본문과의 관계:** 이 절 뒤의 기존 본문은 삭제하지 않고 이전 설계·조사 기록으로 보존한다. E1~E10과 충돌하는 값·완료/승인/미확인 표현은 이 절과 중앙10절이 대체한다. 특히90초·Walk300·NPC×10/40·NPC 발소리·3요소 이벤트 HUD·타임아웃 즉시 재요청은 최신 목표가 아니다. E1~E10 밖의 항목을 이번 승인으로 일괄 확정하지 않는다.
+2026-11-13의 P2 설계 변경에서 아래 항목을 확정했다. 결정의 근거와 당시 승인 범위는 [설계 이력](../../CodexContext/ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)에, 기준 커밋의 C++ 구현과 미검증 범위는 [구현 상태](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에 정리했다.
 
 ### E1 — 결과 통계와 순위 분리
 
 **설계 승인:** 결과표 유물 열은 경기 중 누적 획득 횟수, 최종 순위는 종료 시 등록 유물 수를 사용하며 동률 공동 순위를 허용한다. 두 통계를 별도 관리하고 표시 변경으로 서버 승리 판정을 바꾸지 않는다.
 
-**구현 확인 / 부분 구현:** `ADMRelicManager::TryCommitRelicAcquisition` → `ADMMatchPlayerState::IncrementAcquiredRelicCount` → `ADMMatchGameMode::BuildFinalPlayerResults`로 누적 통계를 보관한다. `FDMMatchResultEntry`의 `AcquiredRelicCount`와 `RelicCount`가 분리되어 있다. 그러나 `UDMPlayerResultRowWidget::SetResultEntry`는 현재 `RelicCount`를 표시하므로 목표 표시와 불일치한다. 성공 Pickup/Steal Commit마다 증가하는 것이 현재 동작이다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E1 절을 함께 읽는다.
+**P2 당시 기록:** 획득 수 열은 미반영 상태였다. `ADMRelicManager::TryCommitRelicAcquisition`이 성공하면 `ADMMatchPlayerState::IncrementAcquiredRelicCount`로 누적 획득 수를 기록하고 `ADMMatchGameMode::BuildFinalPlayerResults`가 등록 수와 획득 수를 구분해 결과를 구성한다. **현재 C++:** `RelicCount`는 경기 종료 시 등록 수, `AcquiredRelicCount`는 경기 중 누적 획득 수다. `SetResultEntry`는 두 값을 각각 `TXT_RelicCount`와 `TXT_AcquiredRelicCount`에 설정한다. 실제 WBP 바인딩은 미검증이다.
 
 ### E2 — 전멸 승자 단독 1위
 
 **설계 승인:** 일반 종료는 최종 등록 수 순위다. 전멸 승리에서는 등록 수와 무관하게 승자를 단독1위로 고정하고, 나머지는 2위부터 등록 수 기준 공동 순위를 부여한다. 승리 배너와 결과표의 승자 의미가 모순되지 않아야 한다.
 
-**구현 확인 / 부분 구현:** `DMMatchResultRules::SortAndRankResults`는 등록 수 내림차순이며 같은 등록 수에서만 승자를 우선한다. `ADMMatchGameMode::BuildFinalPlayerResults`가 이 함수를 호출한다. 따라서 등록 수가 적은 전멸 승자가 결과표1위가 아닐 수 있다. 현재 함수는 종료 사유별 승자 고정 계약을 받지 않는다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E2 절을 함께 읽는다.
+**P2 당시 기록:** 정렬은 등록 수를 우선해 전멸 승자의 단독 1위를 보장하지 않았다. **현재 C++:** 서버가 전멸 승리로 경기를 종료하면 `BuildFinalPlayerResults`가 `SortAndRankResults`에 단독 1위 옵션을 전달한다. 나머지 참가자는 등록 수 내림차순으로 정렬하고, 동률에는 공동 순위를 부여한다. 실제 WBP 표시는 미검증이다.
 
 ### E7 — RandomEvent HUD 설명 단일화
 
@@ -28,15 +22,11 @@
 
 **구현 확인 / 부분 구현:** `UDMRandomEventHUDWidget::RefreshPresentation`은 현재 TXT_EventName/TXT_EventDescription/PB_EventProgress 세 요소를 모두 요구하고 이름·진행률도 갱신한다. `UDMGameRootWidget`은 GameState 및 표시 활성 상태를 연결한다. 조사한 C++에서 외부 시스템이 이름·진행바 자식 포인터를 직접 사용하는 경로는 확인하지 못했다. 기존 세 요소 명세는 이전 버전이다.
 
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E7 절을 함께 읽는다.
-
 ### E8 — Steam 안전 복구 상태 머신 유지
 
 **설계 승인:** 기존 상태 머신을 유지하며 전면 재작성하지 않는다. Create/Find/Join/Destroy/Update별 비동기 결과를 구분하고 기본 요청30초를 유지한다. 타임아웃은 플랫폼 취소 완료가 아니다. 작업 중 중복 요청을 거절하고 원 요청 완료·필요한 잔여 세션 정리·안전한 재시도 조건 확인 후 다음 요청을 허용한다. 불확실하면 차단·재시작 안내한다. 영구 차단 후 무의미한 로비 재시도를 반복하지 않는다.
 
 **구현 확인:** `UDMOnlineSessionSubsystem::HandleOperationTimeout`은 지연 완료를 기다리고 Find 취소를 시도한다. Create/Join 지연·실패는 `BeginRecoveryDestroy`로 잔여 세션을 처리한다. Destroy 완료는 성공 플래그와 NamedSession 잔존을 확인한다. Find는 취소/완료 결과에 따라 종료하며 Update 지연 완료는 실패 처리한다. `CompleteOperation`은 Delegate·Timer·상태를 정리한 뒤 원 작업 결과를 알린다. `FailClosedRecovery`의 bRecoveryBlocked와 `RejectBlockedOperation`은 불확실한 상태에서 새 요청을 막는다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E8 절을 함께 읽는다.
 
 **검증 상태:** BP/DataAsset/Animation 실제 적용은 에셋 미검증, 빌드·PIE·Steam은 실행 미검증이다. 아래 완료 기준은 향후 검증 시나리오이며 통과 기록이 아니다. C++·WBP·Config 변경은 이번 문서 승인에 포함되지 않는다. [공통 게임 규칙](../../CodexContext/GameplayRules.md) · [네트워크 정책](../../CodexContext/NetworkPolicy.md)를 상호 참조한다.
 
@@ -66,6 +56,8 @@
 
 ## 2. 경기 UI 계층
 
+미니맵은 일반 경기 진행에서 자기 Pawn과 활성 자기 베이스를 표시한다. 조작 안내는 일반 진행과 연장전에서 표시할 수 있고 입력을 누르는 동안 상세 패널을 연다. 관전·메뉴·상자·대상 선택 제약은 [Root의 가시성 구현](../Technical/11_UMG_UI.md)에 정리했다.
+
 ```text
 WBP_DMGameRoot
 ├─ GameplayLayer
@@ -86,6 +78,8 @@ WBP_DMGameRoot
 `ADMMatchPlayerController`가 로컬 `WBP_DMGameRoot`를 만들고 정리하며 입력 모드를 관리한다. 카메라 암전은 `APlayerCameraManager`의 Fade를 쓴다.
 
 ## 3. 위젯별 데이터 계약
+
+상태 HUD는 소유자 타이밍·개인 알림을 읽고, 퀘스트 HUD는 RunId별 완료와 퇴장 표현을 맡는다. WBP 바인딩과 배치는 에디터 확인 대상이다.
 
 | 위젯 | 표시 데이터 | 데이터 원본 |
 |---|---|---|
@@ -123,6 +117,8 @@ WBP_DMGameRoot
 - 결과 화면은 다른 모든 경기 UI보다 우선한다.
 
 ## 5. 설정 UI
+
+현행 설정 코드에 창 모드 미리 적용·되돌림과 언어 코드 선택이 있다. P9 번역 적용과 각 화면의 줄바꿈은 검증 대기다.
 
 탭은 Graphics, Audio, Controls, Language, Voice 순서다. 타이틀·로비·인게임 메뉴에서 같은 위젯을 쓴다.
 

@@ -2,7 +2,7 @@
 
 ## P3-9 최신 기준 — 2026-11-17
 
-기준 HEAD: `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. [최신 구현 대조와 검증 한계](ImplementationStatus.md#p3-9--최신-아키텍처-결정-및-구현-대조-2026-11-17)를 함께 읽는다. 아래 최신 절과 충돌하는 P2/기존 본문은 당시 설계·조사 이력으로 보존하며 현재 완료 근거로 사용하지 않는다.
+기준 HEAD: `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. [최신 구현 대조와 검증 한계](ImplementationStatus.md#p3-9--최신-아키텍처-결정-및-구현-대조-2026-11-17)를 함께 읽는다. 이 절은 당시 구조를 기록한다. 현재 클래스와 소유권은 [기준 체크포인트](ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에서 확인한다.
 
 - **최신 결정:** `ADMJellyCharacterBase`를 공통 기반으로 `ADMPlayerCharacter`·`ADMNPCCharacter`를 유지한다. 기존 GameMode·GameState·PlayerState·PlayerController 및 Manager·Component 책임을 유지한다. 두 Character 헤더의 실제 상속도 확인했다.
 - **B안 통합 중단:** P3-7 Anonymous Presentation PoC를 본 프로젝트에 통합하지 않는다. 실험 브랜치·Worktree는 별도 보존하며 코드·에셋을 복사하지 않는다.
@@ -113,6 +113,8 @@
 
 ## 3. Character 계층
 
+`UDMSizeAmplificationComponent`는 서버에서 캐릭터 크기 효과를 시작하고 캡슐 전환을 확인한다. `SizeState` 복제로 필요한 외형을 표현하며, 소유자 HUD의 효과 타이밍은 `UDMCharacterStateComponent`가 제공한다.
+
 ```text
 ADMJellyCharacterBase
 ├── ADMPlayerCharacter
@@ -179,6 +181,8 @@ flowchart LR
 서로 다른 Actor의 RPC·Replication 도착 순서를 사실상 동기화라고 가정하지 않는다. ResultId, RequestId, 서버 종료 시각을 이용해 인과관계를 명시한다. Listen Server 호스트는 서버 측 값 변경 후 별도로 UI 알림이 필요하며 `OnRep`만 믿지 않는다.
 
 ## 7. 수명 경계
+
+로컬 `UDMGameRootWidget`은 현재 Pawn·Phase·관전 제한에 따라 보조 HUD를 제어한다. 사망·Pawn 교체·경기 종료에서 상태 정리와 위젯 수명은 각각의 소유자가 관리한다. [기준 체크포인트의 구현·검증 상태](ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)
 
 | 사건 | 정리 의무 |
 |---|---|

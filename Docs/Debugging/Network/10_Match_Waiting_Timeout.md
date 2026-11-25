@@ -2,7 +2,7 @@
 
 ## P3-9 정정 — 2026-11-17
 
-기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래 원문은 개발 이력으로 보존한다. 최신 상태는 이 절과 [구현 현황](../../../CodexContext/ImplementationStatus.md)을 따른다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
+기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래는 당시의 P3 개발 기록이다. 현재 구현과 검증 상태는 [기준 체크포인트](../../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에서 확인할 수 있다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
 
 - `Public/Framework/Match/DMMatchGameMode.h::StartingRosterTimeoutSeconds` 기본값은 **90.0f**다. 서버 `StartPlay`에서 Waiting·종료 사유 None·미확정 명단·비활성 Timer 조건으로 설정한다. 클라이언트별 로딩 시작 시각 기준이 아니다.
 - `IsStartingRosterComplete`는 기대 인원, 유효 PlayerState·고유 BaseSlot·Alive·Pawn/Controller/PlayerState 양방향 연결을 검사한다. `HandleStartingNewPlayer_Implementation`도 Spawn/Possess 및 PlayerState 연결을 확인한다.
@@ -14,8 +14,10 @@
 |---|---|
 | 문제 | 승인된 참가자 중 한 명이라도 경기 맵에 오지 못하면, 나머지 전원이 Waiting 화면에 갇혔다 |
 | 원인 | Waiting 단계에 기한이 없었고, 시작 판정은 "누군가 입장했을 때"만 다시 실행됐다 |
-| 해결 | 90초 기한을 두고, 초과하면 기존 중단 → 결과 화면 → 로비 복귀 경로에 합류시켰다 |
+| 해결 | 90초 기한을 두었고, 초과 시 기존 중단 → 결과 화면 → 로비 복귀 경로에 합류시켰다 |
 | 관련 코드 | `ADMMatchGameMode::StartPlay`, `HandleStartingRosterTimeout`, `TryAbortMatch` |
+
+당시 사례의 동작을 기록했다. P2의 120초 설계 기록과 현재 90초 C++ 기본값은 [현재 경기 흐름](../../Technical/03_Match_Flow_Result.md)에서 구분한다.
 
 ## 현상
 
@@ -103,14 +105,14 @@ void ADMMatchGameMode::HandleStartingRosterTimeout()
 }
 ```
 
-카운트다운 진입에 성공하면 타이머를 해제한다. 핸들러도 Phase를 다시 검사하므로 해제 시점이 어긋나도 안전하다. 기한 90초는 Steam P2P 재접속, 경기 맵 로딩, NPC 생성 시간을 고려한 값이고, BP에서 조정할 수 있게 `EditDefaultsOnly`로 열어 두었다.
+카운트다운 진입에 성공하면 타이머를 해제한다. 핸들러도 Phase를 다시 검사하므로 해제 시점이 어긋나도 안전하다. 당시에는 Steam P2P 재접속, 경기 맵 로딩, NPC 생성 시간을 고려해 기한을 90초로 두었다. BP에서 조정할 수 있게 `EditDefaultsOnly`로 열어 두었다.
 
 ## 검증 방법
 
 | 시나리오 | 확인할 결과 |
 |---|---|
-| 3인 경기 이동 중 클라이언트 1명 강제 종료 | 90초 후 `Starting roster timed out` → 결과 화면 → 2명 로비 복귀 |
-| 정상 시작 | 90초가 지나도 아무 일 없음 |
+| 3인 경기 이동 중 클라이언트 1명 강제 종료 | 당시 기한 90초 후 `Starting roster timed out` → 결과 화면 → 2명 로비 복귀 |
+| 정상 시작 | 당시 기한 90초가 지나도 중단 없음 |
 | 빠른 확인 | BP에서 기한을 20초로 줄여 같은 시나리오 실행 |
 
 ## 정리

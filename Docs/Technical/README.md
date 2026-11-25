@@ -4,6 +4,8 @@ UE5.5 Listen Server 환경에서 시스템별로 **누가 상태의 원본인가
 
 ## 먼저 볼 문서
 
+[입력과 이동](05_Input_Movement.md), [스킬](10_Skill_Cooldown_Target.md), [경기 HUD](11_UMG_UI.md)를 함께 보면 로컬 입력이 서버의 대상 검증을 거쳐 상태와 표현으로 이어지는 흐름을 따라갈 수 있다.
+
 | 문서 | 핵심 |
 |---|---|
 | [01. 아키텍처](01_Architecture.md) | 서버 상태와 클라이언트 표현 분리, 클래스별 책임 |
@@ -20,7 +22,7 @@ UE5.5 Listen Server 환경에서 시스템별로 **누가 상태의 원본인가
 | 02 | [Steam 세션과 로비](02_Steam_Session_Lobby.md) | 비동기 세션 작업, 실패 복구, 로비 시작 검증 |
 | 03 | [경기 흐름과 결과](03_Match_Flow_Result.md) | Phase 전환 규칙, 승패 판정 순수 함수, 결과 ACK |
 | 04 | [복제와 RPC 기준](04_Replication_RPC.md) | 복제 범위, RPC 종류별 용도 |
-| 05 | [입력과 이동](05_Input_Movement.md) | Mapping Context 전환, Sprint를 SavedMove 플래그로 |
+| 05 | [입력과 이동](05_Input_Movement.md) | 입력 Context, Sprint 예측, 둔화와 크기 전환 |
 | 06 | [유물 상호작용](06_Relic_Interaction.md) | 서버 검증형 트랜잭션과 예약 |
 | 07 | [전투](07_Combat_Death.md) | 예측, 히트 판정, 사망 |
 | 08 | [NPC](08_NPC_AI.md) | 인구 확정, 타이머 기반 AI, 집단 반응 |
@@ -31,6 +33,9 @@ UE5.5 Listen Server 환경에서 시스템별로 **누가 상태의 원본인가
 | 13 | [사망 관전](13_Spectator_Respawn.md) | 서버 생명주기와 로컬 카메라 단계 |
 | 14 | [음성 채팅](14_Voice_Chat.md) | Steam Voice, 생존 상태별 청취 정책 |
 | 15 | [설정과 장애 복구](15_Settings_NetworkRecovery.md) | 로컬 설정 소유자, 실패 상황별 복구 |
+| 16 | [크기 증폭](CharacterSizeAmplification.md) | 서버 캡슐 전환, 충돌 롤백, 복제와 이동 예측 |
+| 17 | [경기 HUD 표현](GameplayHUDPresentation.md) | Root 데이터 연결, 가시성, 위젯 갱신과 정리 |
+| 18 | [Gameplay Audio](GameplayAudio.md) | 소리의 발생 권한, 개인 2D와 위치 3D 재생 |
 
 소스 경로는 저장소 루트의 `Source/DontMelt/`를 기준으로 한다.
 

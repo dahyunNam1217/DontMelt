@@ -12,6 +12,8 @@
 
 ## AnimInstance 계산
 
+`AdvanceJellySpring`은 프레임 간격을 1~12개 구간으로 나눠 반암시적 오일러 적분을 수행한다. 기본 최대 서브스텝 목표는 1/120초다. 점프음은 로컬 점프 경로에서 재생하고 서버 Multicast가 원격에 보완한다. 소유자는 Multicast 재생에서 빠진다. ABP 연결과 원격 타이밍은 미검증이다.
+
 `NativeUpdateAnimation`이 수평 속도, 가속·감속, 착지·공중 상태를 읽어 몸통·머리·양팔의 목표 각도를 정하고, `AdvanceJellySpring`이 현재 각도를 목표로 끌어당긴다.
 
 ```text
@@ -53,6 +55,8 @@ MeshComponent->SetSimulatePhysics(true);
 - 생존 상태의 원본은 여전히 서버 PlayerState의 `LifeState`다.
 
 ## 관련 코드
+
+점프 오디오 분기는 [DMPlayerCharacter.cpp](../../Source/DontMelt/Private/Characters/DMPlayerCharacter.cpp)의 `OnJumped`와 `MulticastPlayJumpSound`에 있다.
 
 - [DMJellyAnimInstance.cpp](../../Source/DontMelt/Private/Animations/DMJellyAnimInstance.cpp) — `NativeUpdateAnimation`, `AdvanceJellySpring`, `UpdateJellyBodyMotion`, `UpdateJellySecondaryMotion`
 - [DMJellyPhysicsComponent.cpp](../../Source/DontMelt/Private/Characters/Components/DMJellyPhysicsComponent.cpp) — `StartDeathRagdollPresentation`, `ApplyDeathRagdollPresentation`

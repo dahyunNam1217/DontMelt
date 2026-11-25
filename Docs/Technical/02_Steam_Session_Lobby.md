@@ -2,7 +2,7 @@
 
 ## P3-9 정정 — 2026-11-17
 
-기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래 원문은 개발 이력으로 보존한다. 최신 상태는 이 절과 [구현 현황](../../CodexContext/ImplementationStatus.md)을 따른다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
+기준 HEAD `001a08241ecd01dfa1ef565f11c7791eaf73eaeb`. 아래는 당시의 P3 개발 기록이다. 현재 구현과 검증 상태는 [기준 체크포인트](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에서 확인할 수 있다. 소스 경로는 `Source/DontMelt/` 기준이며 빌드·PIE·Steam·에셋 검증은 미실행이다.
 
 - `Private/Framework/Lobby/DMLobbyGameMode.cpp`의 `HandleStartMatchRequest`, `TryReopenReturningLobby`, `RestoreLobbyStatus`, `HandleReturningPlayersTimeout`에서 세션 복구 차단을 확인한다.
 - `HandleLobbyStatusUpdated`는 유효 구독·진행 문맥·세션 유효성·복구 차단·Busy를 검사한다. 등록 전 기존 Delegate를 해제하고 요청 직후 Handle 유효성도 확인하여 동기 완료의 중복 처리를 방지하는 코드다.
@@ -44,6 +44,8 @@ flowchart TD
 | 작업 제어 | `CurrentOperation`으로 작업 중첩을 막고, 작업마다 30초 타임아웃 |
 
 ## 실패 대응
+
+P3-4의 복구 차단 시 로비 시작 잠금과 콜백·타이머 정리 원칙은 유지된다. 현재 `ADMFrontendPlayerController`는 생성·검색·참가 실패 안내를 `FText`로 전달한다. 실제 Steam 실패 복구와 언어별 표시 결과는 이 커밋에서 미검증이다.
 
 | 실패 | 처리 | 문서 |
 |---|---|---|

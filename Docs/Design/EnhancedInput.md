@@ -2,17 +2,13 @@
 
 ## P2 승인 동기화 — 2026-11-13
 
-이번 사용자 P2 요청의 명시 범위만 **설계 승인**으로 채택한다. 과거 승인으로 소급하지 않는다. 기준 HEAD는 `914173a`이며 구현 사실·설계 승인·에셋 적용·실행 검증은 별개다. 상세 근거와 미결정 사항은 [ImplementationStatus 10절](../../CodexContext/ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)을 따른다.
-
-**아래 기존 본문과의 관계:** 이 절 뒤의 기존 본문은 삭제하지 않고 이전 설계·조사 기록으로 보존한다. E1~E10과 충돌하는 값·완료/승인/미확인 표현은 이 절과 중앙10절이 대체한다. 특히90초·Walk300·NPC×10/40·NPC 발소리·3요소 이벤트 HUD·타임아웃 즉시 재요청은 최신 목표가 아니다. E1~E10 밖의 항목을 이번 승인으로 일괄 확정하지 않는다.
+2026-11-13의 P2 설계 변경에서 아래 항목을 확정했다. 결정의 근거와 당시 승인 범위는 [설계 이력](../../CodexContext/ImplementationStatus.md#10-p2-승인-설계-및-현재-구현--2026-11-13)에, 기준 커밋의 C++ 구현과 미검증 범위는 [구현 상태](../../CodexContext/ImplementationStatus.md#p1-p9-체크포인트-구현과-검증)에 정리했다.
 
 ### E4 — 선택 휠과 지속형 Emote, 별도 FakeDeath
 
 **설계 승인:** 휠은 Emote 선택 UI, 홀드는 선택한 지속형 Emote 실행·유지 방식이다. 입력 종료·취소·상태 전환에서 종료하고, Emote 퀘스트 시작·지속·종료 계약을 유지한다. FakeDeath는 별도 동작 기능으로 관리한다. 기존 문서의 휠 항목 목록만으로 FakeDeath를 일반 Emote와 같은 구현으로 확정하지 않는다.
 
 **구현 확인 / 부분 구현:** `ADMPlayerCharacter::BindPoseAndEmoteInput`, `InputEmoteStarted`, `InputEmoteCompleted`는 기본 `DefaultEmoteId=Scream` 홀드 요청을 연결한다. `UDMCharacterStateComponent::RequestBeginEmote_Implementation` / `RequestEndEmote_Implementation`과 서버 행동·퀘스트 이벤트 경로가 있다. C++ 입력 설정에서 선택 휠 연결은 확인하지 못했다. FakeDeath enum·제한·Anim 분기는 있으나 명시적인 C++ 진입 호출 및 완전한 해제 경로는 확인하지 못했다. BP 전체 미구현이라고 단정하지 않는다.
-
-책임·서버/Client 흐름·RPC/복제·UI·변경 예상 범위·미결정·검증 시나리오는 [중앙 기능 명세](../../CodexContext/ImplementationStatus.md)의 E4 절을 함께 읽는다.
 
 **검증 상태:** BP/DataAsset/Animation 실제 적용은 에셋 미검증, 빌드·PIE·Steam은 실행 미검증이다. 아래 완료 기준은 향후 검증 시나리오이며 통과 기록이 아니다. C++·WBP·Config 변경은 이번 문서 승인에 포함되지 않는다. [공통 게임 규칙](../../CodexContext/GameplayRules.md) · [네트워크 정책](../../CodexContext/NetworkPolicy.md)를 상호 참조한다.
 
@@ -50,11 +46,14 @@
 | `IA_Skill_Invisibility` | 1 | 투명화 |
 | `IA_Skill_FootstepAmplify` | 2 | 발소리 증폭 대상 선택 |
 | `IA_Skill_VisionDistort` | 3 | 시야 교란 대상 선택 |
+| `IA_Skill_SizeAmplification` | 활성 IMC 확인 | 크기 증폭 대상 선택 |
+| `IA_Skill_SlowMovement` | 활성 IMC 확인 | 이동 둔화 대상 선택 |
+| `IA_ShowControls` | 안내 텍스트 F1, 활성 IMC 확인 | 누르는 동안 상세 조작 도움말 |
 | `IA_PushToTalk` | V | 누르는 동안 음성 송신 (PTT 모드) |
 | `IA_ToggleMicrophoneMute` | M | 마이크 음소거 |
 | `IA_Pause` | Esc | 로컬 메뉴 (Listen Server 전체를 멈추지 않음) |
 
-음성 입력은 별도 `IMC_Voice`에 두어, 로비(UI 입력 모드)와 경기 모두에서 같은 키로 동작하게 했다. 초기 설계에서는 `M`을 PTT로 잡았지만, 음소거 키와 함께 정리하면서 PTT를 `V`로 옮겼다.
+음성 입력은 별도 `IMC_Voice`에 두어, 로비(UI 입력 모드)와 경기 모두에서 같은 키로 동작하게 했다. 초기 설계에서는 `M`을 PTT로 잡았지만, 음소거 키와 함께 정리하면서 PTT를 `V`로 옮겼다. 음성 감지 모드에서는 M으로 마이크 음소거를 전환한다. 실제 키 매핑은 활성 IMC에서 확인한다.
 
 ## 3. 자세 모드
 
@@ -71,6 +70,8 @@
 
 ## 4. 상자 상호작용
 
+현재 구현에서 상자 닫기는 입력 Context 복귀에 더해 해당 상자를 서버에 통지한다. 사운드 이벤트 검증과 상호작용 Commit은 별개다.
+
 | 입력 | 처리 |
 |---|---|
 | `F` | 상자 열기(일반 모드) / 닫기(상자 모드) |
@@ -80,6 +81,8 @@
 바닥 유물은 `IMC_Interaction`에 들어가지 않고, `IMC_Gameplay`에서 `F`를 길게 누른다. 상자를 여는 `F`가 닫기 `F`로 바로 인식되지 않도록 Context 전환 시 눌린 키를 무시한다.
 
 ## 5. 스킬 대상 선택
+
+현재 C++의 상대 대상 선택 경로는 기존 발소리·시야 교란과 새 크기 증폭·이동 둔화에 연결된다. 아래 키는 설계 기록이며 실제 매핑은 에디터 확인 대상이다.
 
 | 키 | 처리 |
 |---|---|
