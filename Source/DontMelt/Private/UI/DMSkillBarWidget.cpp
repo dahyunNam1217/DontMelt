@@ -86,7 +86,7 @@ void UDMSkillBarWidget::RefreshDefinitions()
 
     const UDMSkillSetDataAsset* SkillSet = IsValid(SkillComponent) ? SkillComponent->GetSkillSetData() : nullptr;
 
-    // 세 슬롯은 같은 Widget 클래스를 재사용한다.
+    // 모든 슬롯은 같은 위젯 클래스를 재사용한다.
 
     const auto ApplySlot = [SkillSet](UDMSkillSlotWidget* SkillSlotWidget, const FGameplayTag& Tag, const TCHAR* Key)
     {
@@ -106,10 +106,9 @@ void UDMSkillBarWidget::RefreshDefinitions()
 
     ApplySlot(SkillSlot3, DMGameplayTags::Skill_VisionDistort, TEXT("3"));
 
-    // 최종 단축키가 확정되지 않아 신규 슬롯의 Key Label은 비워 둔다.
-    ApplySlot(SkillSlot4, DMGameplayTags::Skill_SizeAmplification, TEXT(""));
+    ApplySlot(SkillSlot4, DMGameplayTags::Skill_SizeAmplification, TEXT("4"));
 
-    ApplySlot(SkillSlot5, DMGameplayTags::Skill_SlowMovement, TEXT(""));
+    ApplySlot(SkillSlot5, DMGameplayTags::Skill_SlowMovement, TEXT("5"));
 }
 
 void UDMSkillBarWidget::RefreshCooldowns()

@@ -36,11 +36,22 @@ void ADMLobbyGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADMLobbyGameState, MinPlayerCount);
 
     DOREPLIFETIME(ADMLobbyGameState, MaxPlayerCount);
+    DOREPLIFETIME(ADMLobbyGameState, LobbyStartState);
 }
 
 #pragma endregion
 
 #pragma region Lobby Rules
+
+void ADMLobbyGameState::SetLobbyStartState(const EDMLobbyStartState NewState)
+{
+    if (HasAuthority() && LobbyStartState != NewState)
+    {
+        LobbyStartState = NewState;
+        LobbyDataChangedDelegate.Broadcast();
+        ForceNetUpdate();
+    }
+}
 
 void ADMLobbyGameState::SetLobbyPlayerLimits(const int32 InMinPlayerCount, const int32 InMaxPlayerCount)
 {

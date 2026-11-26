@@ -115,6 +115,19 @@ void UDMMainMenuWidget::HandleCreateLobbyClicked()
     }
 }
 
+bool UDMMainMenuWidget::IsSteamInviteMenuActive() const
+{
+    return IsInViewport()
+        && ((IsValid(TitlePanel.Get()) && TitlePanel->IsVisible())
+            || (IsValid(MainMenuPanel.Get()) && MainMenuPanel->IsVisible())
+            || (IsValid(JoinPanel.Get()) && JoinPanel->IsVisible()));
+}
+
+void UDMMainMenuWidget::ShowSteamInviteJoinPanel()
+{
+    ShowPanel(JoinPanel.Get());
+}
+
 void UDMMainMenuWidget::HandleOpenJoinClicked()
 {
     SetSteamSessionOptions(TArray<FString>());

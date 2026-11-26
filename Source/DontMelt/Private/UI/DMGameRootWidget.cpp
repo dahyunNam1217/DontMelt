@@ -343,8 +343,41 @@ void UDMGameRootWidget::RebindDataSources(
     RefreshRootVisibility();
 }
 
+bool UDMGameRootWidget::OpenEmoteWheel()
+{
+    return IsValid(EmoteRadialMenu) && OpenEmoteRadial(EmoteRadialMenu);
+}
+
+bool UDMGameRootWidget::IsEmoteRadialSlotAvailable(const int32 SlotIndex) const
+{
+    const ADMPlayerCharacter* Pawn = BoundPawn.Get();
+    return IsValid(Pawn) && Pawn->IsRadialEmoteSlotAvailable(SlotIndex);
+}
+
+bool UDMGameRootWidget::CloseEmoteWheel(const bool bConfirmSelection, int32& SelectedIndex)
+{
+    SelectedIndex = INDEX_NONE;
+    if (!IsValid(EmoteRadialMenu))
+    {
+        return false;
+    }
+
+    const bool bConfirmed = CloseEmoteRadial(EmoteRadialMenu, bConfirmSelection, SelectedIndex);
+    CleanupEmoteRadial(EmoteRadialMenu);
+    return bConfirmSelection && bConfirmed && SelectedIndex >= 0 && SelectedIndex < 4;
+}
+
 void UDMGameRootWidget::ShutdownDataSources()
 {
+    if (ADMPlayerCharacter* OldPawn = BoundPawn.Get())
+    {
+        OldPawn->CancelEmoteWheel();
+    }
+    if (IsValid(EmoteRadialMenu))
+    {
+        CleanupEmoteRadial(EmoteRadialMenu);
+    }
+
     // 기존 화면이 종료되거나 Pawn이 변경되면 안내를 정리한다.
     StopInteractionPromptPolling();
 
@@ -531,6 +564,14 @@ void UDMGameRootWidget::RefreshRootVisibility()
         bShowGameplay ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed;
 
     GameplayLayer->SetVisibility(GameplayVisibility);
+
+    if (ADMPlayerCharacter* LocalPawn = BoundPawn.Get())
+    {
+        if (!LocalPawn->CanOpenEmoteWheel())
+        {
+            LocalPawn->CancelEmoteWheel();
+        }
+    }
 
     if (IsValid(GameplayHUD))
     {

@@ -3,6 +3,8 @@
 #include "Core/DMGameplayUtils.h"
 
 #include "Framework/Lobby/DMLobbyGameMode.h"
+#include "Framework/Lobby/DMLobbyGameState.h"
+#include "Online/DMOnlineSessionSubsystem.h"
 #include "Framework/Lobby/DMLobbyPlayerState.h"
 
 #include "Input/DMInputConfigDataAsset.h"
@@ -19,6 +21,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/GameModeBase.h"
@@ -375,6 +378,35 @@ void ADMLobbyPlayerController::RequestStartMatch()
     );
 
     ServerRequestStartMatch();
+}
+
+bool ADMLobbyPlayerController::CanInviteSteamFriends() const
+{
+    const UWorld* World = GetWorld();
+    ADMLobbyGameMode* LobbyMode = IsValid(World) ? World->GetAuthGameMode<ADMLobbyGameMode>() : nullptr;
+    const ADMLobbyGameState* LobbyState = IsValid(World) ? World->GetGameState<ADMLobbyGameState>() : nullptr;
+    const ADMLobbyPlayerState* LobbyPlayer = GetPlayerState<ADMLobbyPlayerState>();
+    const UDMGameInstance* Instance = Cast<UDMGameInstance>(GetGameInstance());
+    const UDMOnlineSessionSubsystem* Sessions =
+        IsValid(Instance) ? Instance->GetSubsystem<UDMOnlineSessionSubsystem>() : nullptr;
+    const FWorldContext* Context = IsValid(Instance) ? Instance->GetWorldContext() : nullptr;
+    const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+
+    return IsLocalController() && HasAuthority() && IsValid(LobbyMode) && World->GetNetMode() == NM_ListenServer
+        && IsValid(LocalPlayer) && LocalPlayer->GetControllerId() == 0
+        && IsValid(LobbyPlayer) && LobbyPlayer->IsHost() && IsValid(LobbyState)
+        && LobbyState->GetLobbyStartState() == EDMLobbyStartState::Open
+        && LobbyMode->GetNumPlayers() < LobbyState->GetMaxPlayerCount()
+        && !World->IsInSeamlessTravel() && Context != nullptr && Context->TravelURL.IsEmpty()
+        && Context->PendingNetGame == nullptr && IsValid(Sessions) && Sessions->CanInviteToHostedLobby();
+}
+
+bool ADMLobbyPlayerController::ShowSteamFriendInvite()
+{
+    const UDMGameInstance* Instance = Cast<UDMGameInstance>(GetGameInstance());
+    const UDMOnlineSessionSubsystem* Sessions =
+        IsValid(Instance) ? Instance->GetSubsystem<UDMOnlineSessionSubsystem>() : nullptr;
+    return IsValid(Sessions) && CanInviteSteamFriends() && Sessions->ShowHostedLobbyInviteUI(0);
 }
 
 void ADMLobbyPlayerController::LeaveLobby()

@@ -46,6 +46,8 @@ public:
 
     // 표시된 검색 결과 인덱스로 Steam 로비에 참가한다.
     bool JoinSteamLobby(int32 ResultIndex);
+    bool CanAcceptSteamInvite() const;
+    bool JoinInvitedSteamLobby(const class FOnlineSessionSearchResult& Result);
 
     void QuitGame();
 
@@ -86,6 +88,7 @@ private:
         None,
         Find,
         Join,
+        Connecting,
         Cleanup
     };
 
@@ -95,9 +98,8 @@ private:
 
     FDelegateHandle SteamJoinDelegateHandle;
 
-    // 참가 실패 시 정리 완료 후 표시할 메시지다.
-    FString PendingJoinFailureMessage;
-
+    bool StartSteamJoin(UDMOnlineSessionSubsystem& Session, int32 ResultIndex,
+        const class FOnlineSessionSearchResult* InviteResult);
     void HandleSteamFindCompleted(bool bWasSuccessful, const FString& Detail);
 
     void HandleSteamJoinCompleted(bool bWasSuccessful, const FString& Detail);

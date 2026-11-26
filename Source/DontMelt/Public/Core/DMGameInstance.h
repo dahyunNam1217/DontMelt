@@ -112,6 +112,8 @@ public:
     void MarkIntentionalDisconnect(UWorld* SourceWorld);
 
     // GameMode에서 확인한 이동 실패도 같은 복구 경로로 처리한다.
+    ADMFrontendPlayerController* GetSteamInviteFrontend() const;
+
     void StartTravelFailureRecovery(UWorld* SourceWorld, const FString& Diagnostic);
 
     // 종료 요청 중이거나 다른 Steam 작업 중이면 새 종료 요청을 막는다.

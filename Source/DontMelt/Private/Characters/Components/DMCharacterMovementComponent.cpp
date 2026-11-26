@@ -1,4 +1,4 @@
-#include "Characters/Components/DMCharacterMovementComponent.h"
+﻿#include "Characters/Components/DMCharacterMovementComponent.h"
 #if WITH_EDITOR
 #include "Development/DMNPCMovementDiagnostics.h"
 #include "Characters/DMNPCCharacter.h"
@@ -125,8 +125,41 @@ bool UDMCharacterMovementComponent::IsSprintRequested() const
     return bWantsToSprint;
 }
 
+bool UDMCharacterMovementComponent::IsEmoteMovementLocked() const
+{
+    const ADMJellyCharacterBase* Character = Cast<ADMJellyCharacterBase>(CharacterOwner);
+    const UDMCharacterStateComponent* State = IsValid(Character) ? Character->GetCharacterStateComponent() : nullptr;
+    return IsValid(State) && State->GetActionState() == EDMActionState::Emote;
+}
+
+bool UDMCharacterMovementComponent::CanAttemptJump() const
+{
+    return !IsEmoteMovementLocked() && Super::CanAttemptJump();
+}
+
+FVector UDMCharacterMovementComponent::ConstrainAnimRootMotionVelocity(
+    const FVector& RootMotionVelocity, const FVector& CurrentVelocity) const
+{
+    FVector velocity = Super::ConstrainAnimRootMotionVelocity(RootMotionVelocity, CurrentVelocity);
+    if (IsEmoteMovementLocked())
+    {
+        velocity.X = 0.0;
+        velocity.Y = 0.0;
+        if (IsMovingOnGround())
+        {
+            velocity.Z = 0.0;
+        }
+    }
+    return velocity;
+}
+
 float UDMCharacterMovementComponent::GetMaxSpeed() const
 {
+    if (IsEmoteMovementLocked())
+    {
+        return 0.0f;
+    }
+
     const float DefaultMaxSpeed = Super::GetMaxSpeed();
 
     const ADMJellyCharacterBase* JellyCharacter = Cast<ADMJellyCharacterBase>(CharacterOwner);
@@ -245,7 +278,7 @@ void UDMCharacterMovementComponent::UpdateFromCompressedFlags(const uint8 Flags)
 {
     Super::UpdateFromCompressedFlags(Flags);
 
-    bWantsToSprint = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
+    bWantsToSprint = !IsEmoteMovementLocked() && (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
 }
 
 FNetworkPredictionData_Client* UDMCharacterMovementComponent::GetPredictionData_Client() const

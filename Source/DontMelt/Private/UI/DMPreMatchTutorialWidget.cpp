@@ -2,7 +2,9 @@
 #include "Core/DMGameInstance.h"
 
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
 #include "Input/Events.h"
@@ -66,8 +68,29 @@ void UDMPreMatchTutorialWidget::NativeDestruct()
 void UDMPreMatchTutorialWidget::RefreshPage()
 {
     const int32 Count = FMath::Min(TutorialPageTitles.Num(), TutorialPageDescriptions.Num());
+    if (Count > 0)
+    {
+        PageIndex = FMath::Clamp(PageIndex, 0, Count - 1);
+    }
+
+    if (IsValid(IMG_PageImage))
+    {
+        UTexture2D* PageImage = Count > 0 && TutorialPageImages.IsValidIndex(PageIndex)
+            ? TutorialPageImages[PageIndex].Get()
+            : nullptr;
+        if (IsValid(PageImage))
+        {
+            IMG_PageImage->SetBrushFromTexture(PageImage);
+            IMG_PageImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+        else
+        {
+            IMG_PageImage->SetBrushFromTexture(nullptr);
+            IMG_PageImage->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
+
     if (Count <= 0) return;
-    PageIndex = FMath::Clamp(PageIndex, 0, Count - 1);
     if (IsValid(TXT_PageTitle)) TXT_PageTitle->SetText(TutorialPageTitles[PageIndex]);
     if (IsValid(TXT_PageDescription)) TXT_PageDescription->SetText(TutorialPageDescriptions[PageIndex]);
     if (IsValid(TXT_PageIndex)) TXT_PageIndex->SetText(FText::Format(
@@ -75,7 +98,7 @@ void UDMPreMatchTutorialWidget::RefreshPage()
         FText::AsNumber(PageIndex + 1), FText::AsNumber(Count)));
     if (IsValid(TXT_NextButton)) TXT_NextButton->SetText(
         PageIndex == Count - 1
-            ? NSLOCTEXT("DMTutorial", "StartGame", "게임 시작")
+            ? NSLOCTEXT("DMTutorial", "StartGame", "튜토리얼 완료")
             : NSLOCTEXT("DMTutorial", "NextPage", "다음 페이지"));
     if (IsValid(BTN_Previous)) BTN_Previous->SetIsEnabled(!bCompleted && PageIndex > 0);
     if (IsValid(BTN_Next)) BTN_Next->SetIsEnabled(!bCompleted);

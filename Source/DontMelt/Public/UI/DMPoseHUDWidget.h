@@ -6,7 +6,6 @@
 
 #include "DMPoseHUDWidget.generated.h"
 
-class UTextBlock;
 class ADMPlayerCharacter;
 class UDMPoseComponent;
 
@@ -35,20 +34,11 @@ protected:
 
 #pragma region Widget References
 
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UTextBlock> TXT_ModeStatus = nullptr;
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UUserWidget> PoseRadialMenu = nullptr;
 
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UTextBlock> TXT_CurrentPose = nullptr;
-
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UTextBlock> TXT_PoseFlat = nullptr;
-
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UTextBlock> TXT_PoseCrouched = nullptr;
-
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UTextBlock> TXT_PoseStar = nullptr;
+    UFUNCTION(BlueprintImplementableEvent, Category = "DM|Pose")
+    void ApplyPoseRadialHighlight(UUserWidget* RadialMenu, int32 PoseIndex);
 
 #pragma endregion
 

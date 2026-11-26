@@ -40,6 +40,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "DM|Lobby|Requests")
     void LeaveLobby();
 
+    UFUNCTION(BlueprintPure, Category = "DM|Lobby|Steam")
+    bool CanInviteSteamFriends() const;
+
+    UFUNCTION(BlueprintCallable, Category = "DM|Lobby|Steam")
+    bool ShowSteamFriendInvite();
+
 protected:
 #pragma region Lifecycle
 

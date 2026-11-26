@@ -28,6 +28,9 @@ public:
     }
 
     virtual float GetMaxSpeed() const override;
+    virtual bool CanAttemptJump() const override;
+    virtual FVector ConstrainAnimRootMotionVelocity(
+        const FVector& RootMotionVelocity, const FVector& CurrentVelocity) const override;
 #if WITH_EDITOR
     virtual void OnCharacterStuckInGeometry(const FHitResult* Hit) override;
     virtual void HandleImpact(const FHitResult& Hit, float TimeSlice = 0.f,
@@ -48,6 +51,7 @@ private:
     uint32 NPCDiagnosticSuppressedImpacts = 0;
 #endif
     bool IsAuthoritativeSprintActive() const;
+    bool IsEmoteMovementLocked() const;
 
     bool bWasAuthoritativeSprinting = false;
 

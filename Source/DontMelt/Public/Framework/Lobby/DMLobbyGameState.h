@@ -8,6 +8,15 @@
 
 DECLARE_MULTICAST_DELEGATE(FDMOnLobbyDataChanged);
 
+UENUM()
+enum class EDMLobbyStartState : uint8
+{
+    Recovering,
+    Open,
+    Starting,
+    Blocked
+};
+
 UCLASS()
 class DONTMELT_API ADMLobbyGameState : public AGameStateBase
 {
@@ -25,6 +34,9 @@ public:
 #pragma endregion
 
 #pragma region Lobby Rules
+
+    void SetLobbyStartState(EDMLobbyStartState NewState);
+    EDMLobbyStartState GetLobbyStartState() const { return LobbyStartState; }
 
     void SetLobbyPlayerLimits(int32 InMinPlayerCount, int32 InMaxPlayerCount);
 
@@ -64,6 +76,9 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_LobbyPlayerLimits)
     int32 MaxPlayerCount = 0;
+
+    UPROPERTY(ReplicatedUsing = OnRep_LobbyPlayerLimits)
+    EDMLobbyStartState LobbyStartState = EDMLobbyStartState::Recovering;
 
 #pragma endregion
 

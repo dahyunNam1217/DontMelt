@@ -4,6 +4,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "DMLobbyGameMode.generated.h"
 
+enum class EDMLobbyStartState : uint8;
+
 class ADMLobbyPlayerController;
 class UDMMatchRuleDataAsset;
 class UWorld;
@@ -86,6 +88,7 @@ private:
     void ReleaseMatchStartLock(const TCHAR* Reason);
 
     // 복구 차단·상한 소진 시 재시도를 정리하고 시작 잠금을 유지한다.
+    void PublishLobbyStartState(EDMLobbyStartState NewState);
     void StopLobbyStatusRecovery(const TCHAR* Reason);
 
     // 로비 상태 복구 실패 시 제한적으로 재시도하며, 상한 소진을 성공으로 취급하지 않는다.

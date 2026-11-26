@@ -45,6 +45,8 @@ public:
 
     // Steam 검색·참가 중 입력 상태와 안내 문구를 갱신한다.
     void SetSteamJoinBusy(bool bBusy, const FText& Message);
+    bool IsSteamInviteMenuActive() const;
+    void ShowSteamInviteJoinPanel();
 
 private:
 #pragma region UI Actions

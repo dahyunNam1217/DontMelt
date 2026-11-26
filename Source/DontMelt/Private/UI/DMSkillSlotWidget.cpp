@@ -46,7 +46,7 @@ void UDMSkillSlotWidget::UpdateCooldown(
 
     if (!bDataReady)
     {
-        TXT_Cooldown->SetText(FText::FromString(TEXT("--")));
+        TXT_Cooldown->SetText(FText::GetEmpty());
 
         PB_Cooldown->SetPercent(0.0f);
         return;
@@ -65,7 +65,7 @@ void UDMSkillSlotWidget::UpdateCooldown(
     }
     else
     {
-        TXT_Cooldown->SetText(NSLOCTEXT("DMSkillSlot", "CooldownReady", "완료"));
+        TXT_Cooldown->SetText(FText::GetEmpty());
     }
 
     const float Percent =

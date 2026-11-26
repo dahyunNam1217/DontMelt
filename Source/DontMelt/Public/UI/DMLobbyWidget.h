@@ -27,6 +27,9 @@ public:
 
     void RefreshLobby();
 
+    UFUNCTION(BlueprintCallable, Category = "DM|Lobby|Steam")
+    void HandleInviteFriendsClicked();
+
     // 로컬 UI가 유효한 LobbyGameState를 구독하고 있는지 확인한다.
     bool IsGameStateBound() const;
 
@@ -114,6 +117,9 @@ private:
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> BTN_LeaveLobby = nullptr;
+
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UButton> BTN_InviteFriends = nullptr;
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> BTN_Settings = nullptr;

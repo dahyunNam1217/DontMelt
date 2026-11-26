@@ -168,6 +168,7 @@ public:
 
     /** 일반 게임플레이 중 마우스 캡처와 입력 모드를 복구한다. */
     void RestoreGameplayMouseCapture();
+    UDMGameRootWidget* GetGameRootWidget() const { return GameRootWidget.Get(); }
 
 #pragma endregion
 

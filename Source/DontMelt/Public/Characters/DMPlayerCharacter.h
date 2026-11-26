@@ -8,6 +8,7 @@
 #include "UObject/SoftObjectPath.h"
 #include "DMPlayerCharacter.generated.h"
 
+class UDMGameRootWidget;
 class UCameraComponent;
 class USpringArmComponent;
 class UDMSizeAmplificationComponent;
@@ -46,6 +47,12 @@ class DONTMELT_API ADMPlayerCharacter : public ADMJellyCharacterBase
     GENERATED_BODY()
 
 public:
+    bool CanOpenEmoteWheel() const;
+    bool IsEmoteGameplayAllowed() const;
+    bool IsRadialEmoteAllowed(FName EmoteId) const;
+    bool IsRadialEmoteSlotAvailable(int32 Slot) const;
+    void CancelEmoteWheel();
+
     ADMPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
     virtual UNiagaraComponent* GetAttackVFXComponent() const override { return AttackVFXComponent; }
@@ -195,6 +202,7 @@ protected:
     void MulticastPlayJumpSound();
 
     virtual void PawnClientRestart() override;
+    virtual void UnPossessed() override;
 
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -290,11 +298,13 @@ private:
 
 #pragma region Emote Input
 
-    // IA_Emote를 누르면 지속형 감정표현을 시작한다.
     void InputEmoteStarted();
-
-    // IA_Emote를 떼거나 취소되면 감정표현을 종료한다.
     void InputEmoteCompleted();
+    void FinishEmoteWheel(bool bConfirm);
+    void HandleReplicatedEmoteState(EDMActionState OldState, EDMActionState NewState);
+    void ApplyEmoteState(bool bActive);
+    void ClearEmoteStartPending();
+    void ResetLocalEmotePresentation();
 
 #pragma endregion
 
@@ -382,12 +392,14 @@ private:
     FVector ThirdPersonSocketOffset = FVector::ZeroVector;
 
     /**
-     * IA_Emote 입력 시 사용할 감정표현 ID.
-     * 감정표현 휠 도입 전 기본값이며, AnimBP Emote 연출에 존재하는 ID로 지정해야 한다.
-     * (퀘스트 판정은 EmoteId를 구분하지 않는다.)
+     * 기존 Blueprint 호환성을 위한 기본 ID. 휠은 RadialEmoteIds를 사용한다.
      */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DontMelt|Emote", meta = (AllowPrivateAccess = "true"))
     FName DefaultEmoteId = TEXT("Scream");
+
+    // 휠 칸의 순서대로 서버에서 허용할 감정표현 ID를 지정한다.
+    UPROPERTY(EditDefaultsOnly, Category = "DontMelt|Emote")
+    TArray<FName> RadialEmoteIds;
 
 #pragma endregion
 
@@ -399,8 +411,11 @@ private:
     /** Gameplay 원본이 아닌 소유 클라이언트 카메라 표현 배율. */
     float SizeAmplificationCameraScale = 1.0f;
 
-    // 로컬 감정표현 입력 유지 상태. Gameplay Emote 상태의 원본은 StateComponent다.
-    bool bIsEmoteInputHeld = false;
+    TWeakObjectPtr<UDMGameRootWidget> OpenEmoteWheelRoot;
+    FTimerHandle EmoteStartPendingTimer;
+    bool bEmoteStartPending = false;
+    bool bEmoteEndPending = false;
+    bool bEmoteCameraActive = false;
 
     // 기본 시점은 1인칭이며 IA_View 입력으로 1인칭/3인칭을 전환한다.
     bool bIsFirstPersonView = true;

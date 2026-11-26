@@ -185,6 +185,27 @@ void UDMGameInstance::MarkIntentionalDisconnect(UWorld* SourceWorld)
     IntentionalDisconnectWorld = SourceWorld;
 }
 
+ADMFrontendPlayerController* UDMGameInstance::GetSteamInviteFrontend() const
+{
+    UWorld* World = GetWorld();
+    const FWorldContext* Context = GetWorldContext();
+    if (!IsValid(World) || World->GetNetMode() != NM_Standalone || bHandlingNetworkFailure
+        || bRecoveryTravelRequested || bOnlineRoomExitInProgress || World->IsInSeamlessTravel()
+        || Context == nullptr || Context->PendingNetGame != nullptr || !Context->TravelURL.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    const FString MenuPackage = FPackageName::ObjectPathToPackageName(UGameMapsSettings::GetGameDefaultMap());
+    if (World->GetOutermost()->GetName() != MenuPackage)
+    {
+        return nullptr;
+    }
+
+    ADMFrontendPlayerController* Frontend = Cast<ADMFrontendPlayerController>(GetFirstLocalPlayerController(World));
+    return IsValid(Frontend) && Frontend->CanAcceptSteamInvite() ? Frontend : nullptr;
+}
+
 bool UDMGameInstance::CanBeginOnlineRoomExit()
 {
     if (bOnlineRoomExitInProgress || bHandlingNetworkFailure)

@@ -4,8 +4,6 @@
 #include "Characters/DMPlayerCharacter.h"
 #include "Characters/Components/DMPoseComponent.h"
 
-#include "Components/TextBlock.h"
-
 #pragma region Lifecycle
 
 void UDMPoseHUDWidget::NativeConstruct()
@@ -98,6 +96,10 @@ void UDMPoseHUDWidget::RefreshPresentation()
     if (!bPresentationActive || !IsValid(Character) || !Character->IsLocallyControlled()
         || !Character->IsPoseInputModeActive())
     {
+        if (IsValid(PoseRadialMenu))
+        {
+            ApplyPoseRadialHighlight(PoseRadialMenu, 0);
+        }
         SetVisibility(ESlateVisibility::Collapsed);
         return;
     }
@@ -111,69 +113,21 @@ void UDMPoseHUDWidget::RefreshPresentation()
 
     const EDMPoseType CurrentPose = IsValid(PoseComponent) ? PoseComponent->GetPoseType() : EDMPoseType::Default;
 
-    if (IsValid(TXT_ModeStatus))
+    if (IsValid(PoseRadialMenu))
     {
-        TXT_ModeStatus->SetText(
-            bServerConfirmed ? NSLOCTEXT("DMPoseHUD", "PoseModeActive", "자세 선택 모드")
-                             : NSLOCTEXT("DMPoseHUD", "PoseModePending", "서버 자세 상태 확인 중")
-        );
+        int32 PoseIndex = 0;
+        if (bServerConfirmed)
+        {
+            switch (CurrentPose)
+            {
+            case EDMPoseType::Flat: PoseIndex = 1; break;
+            case EDMPoseType::Crouched: PoseIndex = 2; break;
+            case EDMPoseType::Star: PoseIndex = 3; break;
+            default: break;
+            }
+        }
+        ApplyPoseRadialHighlight(PoseRadialMenu, PoseIndex);
     }
-
-    // 실제 적용된 자세만 선택 상태로 강조한다.
-    const bool bFlat = bServerConfirmed && CurrentPose == EDMPoseType::Flat;
-
-    const bool bCrouched = bServerConfirmed && CurrentPose == EDMPoseType::Crouched;
-
-    const bool bStar = bServerConfirmed && CurrentPose == EDMPoseType::Star;
-
-    if (IsValid(TXT_PoseFlat))
-    {
-        TXT_PoseFlat->SetRenderOpacity(bFlat ? 1.0f : 0.45f);
-    }
-
-    if (IsValid(TXT_PoseCrouched))
-    {
-        TXT_PoseCrouched->SetRenderOpacity(bCrouched ? 1.0f : 0.45f);
-    }
-
-    if (IsValid(TXT_PoseStar))
-    {
-        TXT_PoseStar->SetRenderOpacity(bStar ? 1.0f : 0.45f);
-    }
-
-    if (!IsValid(TXT_CurrentPose))
-    {
-        return;
-    }
-
-    if (!bServerConfirmed)
-    {
-        TXT_CurrentPose->SetText(NSLOCTEXT("DMPoseHUD", "PosePending", "적용 대기"));
-        return;
-    }
-
-    FText PoseName;
-
-    switch (CurrentPose)
-    {
-    case EDMPoseType::Flat:
-        PoseName = NSLOCTEXT("DMPoseHUD", "Flat", "납작");
-        break;
-
-    case EDMPoseType::Crouched:
-        PoseName = NSLOCTEXT("DMPoseHUD", "Crouched", "웅크림");
-        break;
-
-    case EDMPoseType::Star:
-        PoseName = NSLOCTEXT("DMPoseHUD", "Star", "별 자세");
-        break;
-
-    default:
-        PoseName = NSLOCTEXT("DMPoseHUD", "Default", "기본 자세");
-        break;
-    }
-
-    TXT_CurrentPose->SetText(FText::Format(NSLOCTEXT("DMPoseHUD", "CurrentPoseFormat", "현재 자세: {0}"), PoseName));
 }
 
 #pragma endregion

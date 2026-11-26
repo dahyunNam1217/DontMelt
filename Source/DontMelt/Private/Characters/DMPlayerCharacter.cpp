@@ -3,6 +3,9 @@
 #include "Core/DMGameplayUtils.h"
 
 #include "Framework/Match/DMMatchPlayerController.h"
+#include "Framework/Match/DMMatchGameState.h"
+#include "Framework/Match/DMMatchPlayerState.h"
+#include "UI/DMGameRootWidget.h"
 #include "Characters/Components/DMCombatComponent.h"
 #include "Characters/Components/DMInteractionComponent.h"
 #include "Characters/Components/DMPoseComponent.h"
@@ -111,6 +114,14 @@ void ADMPlayerCharacter::BeginPlay()
         }
     }
 
+    if (!HasAuthority())
+    {
+        if (UDMCharacterStateComponent* StateComponent = GetCharacterStateComponent())
+        {
+            StateComponent->OnReplicatedActionStateChanged().AddUObject(this, &ThisClass::HandleReplicatedEmoteState);
+        }
+    }
+
     if (USkeletalMeshComponent* CharacterMesh = GetMesh())
     {
         /*
@@ -143,6 +154,13 @@ void ADMPlayerCharacter::BeginPlay()
 
 void ADMPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    ResetLocalEmotePresentation();
+    if (UDMCharacterStateComponent* StateComponent = GetCharacterStateComponent())
+    {
+        StateComponent->OnReplicatedActionStateChanged().RemoveAll(this);
+        StateComponent->OnAuthoritativeEmoteStateChanged().RemoveAll(this);
+    }
+
     // 사망·Respawn·퇴장·맵 이동 등으로 Character가 사라질 때 소리를 확실히 정지한다.
     if (IsValid(QuestSirenAudioComponent))
     {
@@ -150,6 +168,20 @@ void ADMPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 
     Super::EndPlay(EndPlayReason);
+}
+
+void ADMPlayerCharacter::UnPossessed()
+{
+    ResetLocalEmotePresentation();
+    if (HasAuthority())
+    {
+        if (UDMCharacterStateComponent* StateComponent = GetCharacterStateComponent())
+        {
+            StateComponent->EndAction(EDMActionState::Emote);
+        }
+    }
+
+    Super::UnPossessed();
 }
 
 void ADMPlayerCharacter::OnJumped_Implementation()
@@ -326,6 +358,7 @@ void ADMPlayerCharacter::PrepareLocalInputForSpectating()
      * Mapping Context 존재 여부와 관계없이
      * Local runtime mode는 반드시 종료한다.
      */
+    ResetLocalEmotePresentation();
     bIsPoseInputMode = false;
 
     // 관전 진입 시 기존 자세 메뉴도 즉시 닫는다.
@@ -636,7 +669,7 @@ void ADMPlayerCharacter::BindPoseAndEmoteInput(UEnhancedInputComponent* Enhanced
         );
 
         EnhancedInputComponent->BindAction(
-            InputConfig->EmoteAction, ETriggerEvent::Canceled, this, &ThisClass::InputEmoteCompleted
+            InputConfig->EmoteAction, ETriggerEvent::Canceled, this, &ThisClass::CancelEmoteWheel
         );
     }
     else
@@ -894,6 +927,7 @@ void ADMPlayerCharacter::HandlePoseTypeChanged(const EDMPoseType OldPose, const 
 
 void ADMPlayerCharacter::HandleAuthoritativeEmoteStateChanged(const bool bStarted, const FName EmoteId)
 {
+    ApplyEmoteState(bStarted);
     BroadcastQuestActionEvent(
         bStarted ? DMGameplayTags::QuestEvent_Emote_Start : DMGameplayTags::QuestEvent_Emote_End,
         EDMPoseType::Default,
@@ -1022,6 +1056,22 @@ void ADMPlayerCharacter::RefreshQuestSirenPresentation()
 
 void ADMPlayerCharacter::InputAttackStarted()
 {
+    const UDMCharacterStateComponent* State = GetCharacterStateComponent();
+    if (IsValid(State) && State->GetActionState() == EDMActionState::Emote)
+    {
+        if (!bEmoteEndPending)
+        {
+            bEmoteEndPending = true;
+            RequestEndEmote();
+        }
+        return;
+    }
+
+    if (OpenEmoteWheelRoot.IsValid() || bEmoteStartPending || bEmoteEndPending)
+    {
+        return;
+    }
+
     if (InteractionComponent != nullptr && InteractionComponent->IsInteractionInputLocked())
     {
         return;
@@ -1039,6 +1089,11 @@ void ADMPlayerCharacter::InputAttackStarted()
 
 void ADMPlayerCharacter::InputDefenseStarted()
 {
+    if (OpenEmoteWheelRoot.IsValid() || bEmoteStartPending)
+    {
+        return;
+    }
+
     if (InteractionComponent != nullptr && InteractionComponent->IsInteractionInputLocked())
     {
         return;
@@ -1060,6 +1115,11 @@ void ADMPlayerCharacter::InputDefenseStarted()
 
 void ADMPlayerCharacter::InputInteractStarted()
 {
+    if (OpenEmoteWheelRoot.IsValid() || bEmoteStartPending)
+    {
+        return;
+    }
+
     if (InteractionComponent == nullptr)
     {
         return;
@@ -1153,6 +1213,7 @@ void ADMPlayerCharacter::InputConfirmInteractionCompleted()
 
 void ADMPlayerCharacter::EnterChestInteractionInputMode()
 {
+    CancelEmoteWheel();
     if (!IsLocallyControlled() || !IsValid(InputConfig))
     {
         return;
@@ -1284,7 +1345,7 @@ void ADMPlayerCharacter::InputCloseInteractionStarted()
 
 void ADMPlayerCharacter::InputViewStarted()
 {
-    if (!IsLocallyControlled() || CameraBoom == nullptr)
+    if (!IsLocallyControlled() || CameraBoom == nullptr || bEmoteCameraActive || OpenEmoteWheelRoot.IsValid())
     {
         return;
     }
@@ -1311,7 +1372,7 @@ void ADMPlayerCharacter::InputLook(const FInputActionValue& InputActionValue)
 
     const FVector2D LookInput = InputActionValue.Get<FVector2D>();
 
-    if (LookInput.IsNearlyZero())
+    if (LookInput.IsNearlyZero() || OpenEmoteWheelRoot.IsValid())
     {
         return;
     }
@@ -1368,7 +1429,7 @@ void ADMPlayerCharacter::ApplyLocalCameraView()
 
     CameraBoom->bUsePawnControlRotation = true;
 
-    if (bIsFirstPersonView)
+    if (bIsFirstPersonView && !bEmoteCameraActive)
     {
         CameraBoom->TargetArmLength = 0.0f;
 
@@ -1431,7 +1492,8 @@ void ADMPlayerCharacter::ApplyViewRotationPolicy()
         bPoseLocksBody = PoseComponent->IsPoseLocked();
     }
 
-    if (bPoseLocksBody)
+    const UDMCharacterStateComponent* State = GetCharacterStateComponent();
+    if (bPoseLocksBody || (IsValid(State) && State->GetActionState() == EDMActionState::Emote))
     {
         bUseControllerRotationYaw = false;
 
@@ -1488,6 +1550,11 @@ void ADMPlayerCharacter::RefreshRotationPolicy()
 
 void ADMPlayerCharacter::InputPoseStarted()
 {
+    if (OpenEmoteWheelRoot.IsValid() || bEmoteStartPending)
+    {
+        return;
+    }
+
     if (InteractionComponent != nullptr && InteractionComponent->IsInteractionInputLocked())
     {
         return;
@@ -1629,31 +1696,142 @@ bool ADMPlayerCharacter::SetPoseInputMode(const bool bEnablePoseMode)
 
 #pragma region Emote
 
+bool ADMPlayerCharacter::IsEmoteGameplayAllowed() const
+{
+    const ADMMatchGameState* matchState = GetWorld() ? GetWorld()->GetGameState<ADMMatchGameState>() : nullptr;
+    const ADMMatchPlayerState* playerState = GetPlayerState<ADMMatchPlayerState>();
+    return IsValid(matchState) && IsValid(playerState) && playerState->GetLifeState() == EDMPlayerLifeState::Alive
+        && matchState->GetMatchEndReason() == EDMMatchEndReason::None
+        && (matchState->GetCurrentPhase() == EDMMatchPhase::Playing
+            || matchState->GetCurrentPhase() == EDMMatchPhase::Overtime);
+}
+
+bool ADMPlayerCharacter::IsRadialEmoteAllowed(const FName EmoteId) const
+{
+    const int32 Slot = RadialEmoteIds.Find(EmoteId);
+    return !EmoteId.IsNone() && EmoteId != FName(TEXT("FakeDeath")) && Slot >= 0 && Slot < 4;
+}
+
+bool ADMPlayerCharacter::IsRadialEmoteSlotAvailable(const int32 Slot) const
+{
+    return Slot >= 0 && Slot < 4 && RadialEmoteIds.IsValidIndex(Slot)
+        && IsRadialEmoteAllowed(RadialEmoteIds[Slot]);
+}
+
+bool ADMPlayerCharacter::CanOpenEmoteWheel() const
+{
+    const ADMMatchPlayerController* PC = Cast<ADMMatchPlayerController>(GetController());
+    const UDMCharacterStateComponent* State = GetCharacterStateComponent();
+    return IsLocallyControlled() && IsEmoteGameplayAllowed() && IsValid(PC)
+        && !PC->IsIngameMenuOpen() && !PC->IsSpectatorInformationRestricted()
+        && !PC->IsChestInteractionOpen() && !PC->IsSkillTargetingActive()
+        && !bIsPoseInputMode && !bIsInteractionInputMode && !bIsSkillTargetingInputMode
+        && !bEmoteStartPending && IsValid(State) && !State->IsStunPresentationActive()
+        && State->CanPerformAction(EDMActionRequest::Emote)
+        && (!IsValid(PoseComponent) || !PoseComponent->IsPoseLocked());
+}
+
 void ADMPlayerCharacter::InputEmoteStarted()
 {
-    // 상호작용 입력 잠금 중에는 감정표현을 시작하지 않는다.
-    if (InteractionComponent != nullptr && InteractionComponent->IsInteractionInputLocked())
+    if (OpenEmoteWheelRoot.IsValid() || !CanOpenEmoteWheel())
     {
         return;
     }
 
-    // 최종 허용 여부(사망·자세·행동 상태)는 서버의 CanRequestEmote()가 판정한다.
-    bIsEmoteInputHeld = true;
+    ADMMatchPlayerController* PC = CastChecked<ADMMatchPlayerController>(GetController());
+    UDMGameRootWidget* Root = PC->GetGameRootWidget();
+    if (IsValid(Root) && Root->OpenEmoteWheel())
+    {
+        OpenEmoteWheelRoot = Root;
 
-    RequestBeginEmote(DefaultEmoteId);
+        FInputModeGameAndUI InputMode;
+        InputMode.SetHideCursorDuringCapture(false);
+        PC->SetInputMode(InputMode);
+        PC->bShowMouseCursor = true;
+    }
 }
 
 void ADMPlayerCharacter::InputEmoteCompleted()
 {
-    // 시작 입력이 없었다면 종료 요청을 보내지 않는다.
-    if (!bIsEmoteInputHeld)
+    FinishEmoteWheel(CanOpenEmoteWheel());
+}
+
+void ADMPlayerCharacter::CancelEmoteWheel()
+{
+    FinishEmoteWheel(false);
+}
+
+void ADMPlayerCharacter::FinishEmoteWheel(const bool bConfirm)
+{
+    UDMGameRootWidget* Root = OpenEmoteWheelRoot.Get();
+    OpenEmoteWheelRoot.Reset();
+    if (!IsValid(Root))
     {
         return;
     }
 
-    bIsEmoteInputHeld = false;
+    int32 SelectedIndex = INDEX_NONE;
+    const bool bSelected = Root->CloseEmoteWheel(bConfirm, SelectedIndex);
+    if (ADMMatchPlayerController* PC = Cast<ADMMatchPlayerController>(GetController()))
+    {
+        PC->RestoreGameplayMouseCapture();
+    }
 
-    RequestEndEmote();
+    if (bSelected && IsRadialEmoteSlotAvailable(SelectedIndex))
+    {
+        bEmoteStartPending = true;
+        GetWorldTimerManager().SetTimer(
+            EmoteStartPendingTimer, this, &ThisClass::ClearEmoteStartPending, 2.0f, false);
+        RequestBeginEmote(RadialEmoteIds[SelectedIndex]);
+    }
+}
+
+void ADMPlayerCharacter::ClearEmoteStartPending()
+{
+    bEmoteStartPending = false;
+    GetWorldTimerManager().ClearTimer(EmoteStartPendingTimer);
+}
+
+void ADMPlayerCharacter::HandleReplicatedEmoteState(const EDMActionState OldState, const EDMActionState NewState)
+{
+    if (OldState == EDMActionState::Emote || NewState == EDMActionState::Emote)
+    {
+        ApplyEmoteState(NewState == EDMActionState::Emote);
+    }
+}
+
+void ADMPlayerCharacter::ApplyEmoteState(const bool bActive)
+{
+    if (bActive && (HasAuthority() || IsLocallyControlled()))
+    {
+        ClearSprintRequest();
+        StopJumping();
+        ConsumeMovementInputVector();
+        GetCharacterMovement()->StopMovementImmediately();
+    }
+
+    if (IsLocallyControlled())
+    {
+        CancelEmoteWheel();
+        ClearEmoteStartPending();
+        bEmoteEndPending = false;
+        bEmoteCameraActive = bActive && IsEmoteGameplayAllowed();
+        ApplyLocalCameraView();
+    }
+    ApplyViewRotationPolicy();
+}
+
+void ADMPlayerCharacter::ResetLocalEmotePresentation()
+{
+    CancelEmoteWheel();
+    ClearEmoteStartPending();
+    bEmoteEndPending = false;
+    if (bEmoteCameraActive)
+    {
+        bEmoteCameraActive = false;
+        ApplyLocalCameraView();
+        ApplyViewRotationPolicy();
+    }
 }
 
 #pragma endregion
@@ -1662,6 +1840,11 @@ void ADMPlayerCharacter::InputEmoteCompleted()
 
 bool ADMPlayerCharacter::EnterSkillTargetingInputMode()
 {
+    if (OpenEmoteWheelRoot.IsValid() || bEmoteStartPending)
+    {
+        return false;
+    }
+
     if (!IsLocallyControlled() || !IsValid(InputConfig))
     {
         return false;

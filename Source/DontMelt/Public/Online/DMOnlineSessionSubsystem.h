@@ -43,6 +43,9 @@ public:
 
     // 검색 결과의 인덱스를 사용하여 참가를 요청한다.
     bool JoinLobbySession(int32 ResultIndex);
+    bool JoinLobbySession(const FOnlineSessionSearchResult& Result);
+    bool CanInviteToHostedLobby() const;
+    bool ShowHostedLobbyInviteUI(int32 LocalUserNum) const;
 
     // 현재 로컬 세션을 비동기로 해제한다.
     bool DestroyLobbySession();
@@ -161,8 +164,14 @@ private:
 
     TArray<int32> VisibleResultIndices;
 
-    // JoinSession 완료 후 원본 검색 결과를 다시 확인하기 위한 인덱스다.
-    int32 PendingJoinSourceIndex = INDEX_NONE;
+    // 참가 완료에서 주소를 해석할 때까지 원본 결과를 보관한다.
+    TSharedPtr<FOnlineSessionSearchResult> PendingJoinResult;
+
+    IOnlineSessionPtr InviteSessionInterface;
+    FDelegateHandle InviteAcceptedHandle;
+    FString StartupInviteLobbyId;
+    FString LastAcceptedInviteLobbyId;
+    double LastAcceptedInviteTime = 0.0;
 
     FString JoinedConnectString;
 
@@ -179,6 +188,8 @@ private:
 
 #pragma region Completion Callbacks
 
+    void HandleInviteAccepted(bool bSuccess, int32 LocalUserNum, FUniqueNetIdPtr UserId,
+        const FOnlineSessionSearchResult& Result);
     void HandleCreateComplete(FName SessionName, bool bWasSuccessful);
 
     void HandleFindComplete(bool bWasSuccessful);

@@ -44,5 +44,11 @@ public class DontMelt : ModuleRules
 
         // Steam 온라인 서브시스템을 동적으로 로드한다.
         DynamicallyLoadedModuleNames.Add("OnlineSubsystemSteam");
+
+        // Windows에서 Steam Overlay 사용 가능 여부를 확인한다.
+        if (Target.Platform == UnrealTargetPlatform.Win64)
+        {
+            PrivateDependencyModuleNames.Add("Steamworks");
+        }
     }
 }

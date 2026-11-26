@@ -57,6 +57,11 @@ public:
 
     void ShutdownDataSources();
 
+    bool OpenEmoteWheel();
+    bool CloseEmoteWheel(bool bConfirmSelection, int32& SelectedIndex);
+    UFUNCTION(BlueprintPure, Category = "DM|UI|Emote")
+    bool IsEmoteRadialSlotAvailable(int32 SlotIndex) const;
+
     // 필수 BindWidget이 모두 연결되었는지 컨트롤러 생성 직후 확인한다.
     bool HasRequiredBindings() const;
 
@@ -78,6 +83,18 @@ protected:
     virtual void NativeConstruct() override;
 
     virtual void NativeDestruct() override;
+
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UUserWidget> EmoteRadialMenu = nullptr;
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "DM|Emote")
+    bool OpenEmoteRadial(UUserWidget* RadialMenu);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "DM|Emote")
+    bool CloseEmoteRadial(UUserWidget* RadialMenu, bool bConfirmSelection, int32& SelectedIndex);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "DM|Emote")
+    void CleanupEmoteRadial(UUserWidget* RadialMenu);
 
 #pragma region UI Layers
 

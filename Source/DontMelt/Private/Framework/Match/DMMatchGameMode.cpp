@@ -1660,6 +1660,22 @@ bool ADMMatchGameMode::InitializeQuestSystem()
     return true;
 }
 
+void ADMMatchGameMode::EndPlayerEmotes()
+{
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        APlayerController* PC = It->Get();
+        ADMPlayerCharacter* Player = IsValid(PC) ? PC->GetPawn<ADMPlayerCharacter>() : nullptr;
+        if (IsValid(Player))
+        {
+            if (UDMCharacterStateComponent* State = Player->GetCharacterStateComponent())
+            {
+                State->EndAction(EDMActionState::Emote);
+            }
+        }
+    }
+}
+
 void ADMMatchGameMode::ShutdownQuestSystem()
 {
     if (!IsValid(QuestDirector))
@@ -2870,6 +2886,11 @@ bool ADMMatchGameMode::TryTransitionPhase(const EDMMatchPhase TargetPhase, const
         return false;
     }
 
+    if (TargetPhase == EDMMatchPhase::OvertimeIntro)
+    {
+        EndPlayerEmotes();
+    }
+
     if (CurrentPhase == EDMMatchPhase::Waiting && TargetPhase != EDMMatchPhase::Waiting)
     {
         ClearPreMatchWaitingState();
@@ -3438,6 +3459,7 @@ bool ADMMatchGameMode::TryFinishMatch(const EDMMatchEndReason EndReason, const i
 
     ShutdownRandomEventSystem();
 
+    EndPlayerEmotes();
     ShutdownQuestSystem();
 
     CleanupAllSkillRuntimeForTerminalMatch();
@@ -3742,6 +3764,7 @@ bool ADMMatchGameMode::TryAbortMatch(const EDMMatchEndReason EndReason)
 
     ShutdownRandomEventSystem();
 
+    EndPlayerEmotes();
     ShutdownQuestSystem();
 
     CleanupAllSkillRuntimeForTerminalMatch();

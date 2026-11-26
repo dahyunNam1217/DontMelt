@@ -196,6 +196,7 @@ void ADMLobbyGameMode::StartPlay()
 
     LobbyGameState->SetLobbyPlayerLimits(MatchRuleData->MinPlayerCount, MatchRuleData->MaxPlayerCount);
 
+    PublishLobbyStartState(ExpectedReturningPlayers > 0 ? EDMLobbyStartState::Recovering : EDMLobbyStartState::Open);
     TryReopenReturningLobby();
 }
 
@@ -329,6 +330,7 @@ void ADMLobbyGameMode::HandleStartMatchRequest(ADMLobbyPlayerController* Request
 
     // 비동기 요청 중에는 Ready 변경, 신규 입장, 중복 시작을 막는다.
     bTravelCommitted = true;
+    PublishLobbyStartState(EDMLobbyStartState::Starting);
     PendingMatchPlayerCount = ConnectedPlayerCount;
     bRestoringLobbyStatus = false;
 
@@ -479,6 +481,7 @@ bool ADMLobbyGameMode::CanStartMatch(FString& OutFailureReason, int32& OutConnec
     }
 
     int32 HostCount = 0;
+    bool bAnyPlayerNotReady = false;
     FString FirstNotReadyPlayerName;
 
     for (APlayerState* PlayerState : LobbyGameState->PlayerArray)
@@ -512,8 +515,9 @@ bool ADMLobbyGameMode::CanStartMatch(FString& OutFailureReason, int32& OutConnec
             ++HostCount;
         }
 
-        if (!LobbyPlayerState->IsReady() && FirstNotReadyPlayerName.IsEmpty())
+        if (!LobbyPlayerState->IsReady() && !bAnyPlayerNotReady)
         {
+            bAnyPlayerNotReady = true;
             FirstNotReadyPlayerName = LobbyPlayerState->GetPlayerName();
         }
     }
@@ -548,7 +552,7 @@ bool ADMLobbyGameMode::CanStartMatch(FString& OutFailureReason, int32& OutConnec
         return false;
     }
 
-    if (!FirstNotReadyPlayerName.IsEmpty())
+    if (bAnyPlayerNotReady)
     {
         OutFailureReason =
             FString::Printf(TEXT("Not every player is ready. FirstNotReadyPlayer=%s"), *FirstNotReadyPlayerName);
@@ -699,6 +703,7 @@ void ADMLobbyGameMode::HandleLobbyStatusUpdated(const bool bWasSuccessful, const
         {
             Session->ClearApprovedMatchRoster();
             ExpectedReturningPlayers = 0;
+            PublishLobbyStartState(EDMLobbyStartState::Open);
             LobbyStatusRestoreAttemptCount = 0;
 
             // 재개가 완료되었으므로 복귀 대기 타임아웃을 해제한다.
@@ -847,6 +852,7 @@ void ADMLobbyGameMode::ScheduleLobbyStatusRestore()
     }
 
     bRestoringLobbyStatus = true;
+    PublishLobbyStartState(EDMLobbyStartState::Recovering);
 
     // 새 복구 시퀀스를 시작하므로 재시도 횟수를 초기화한다.
     LobbyStatusRestoreAttemptCount = 0;
@@ -944,6 +950,14 @@ void ADMLobbyGameMode::RetryOrReleaseLobbyStatusRestore(const TCHAR* Reason)
     StopLobbyStatusRecovery(Reason);
 }
 
+void ADMLobbyGameMode::PublishLobbyStartState(const EDMLobbyStartState NewState)
+{
+    if (ADMLobbyGameState* LobbyState = GetGameState<ADMLobbyGameState>())
+    {
+        LobbyState->SetLobbyStartState(NewState);
+    }
+}
+
 void ADMLobbyGameMode::StopLobbyStatusRecovery(const TCHAR* Reason)
 {
     UnbindLobbyStatusCompletion();
@@ -953,6 +967,7 @@ void ADMLobbyGameMode::StopLobbyStatusRecovery(const TCHAR* Reason)
     bReopeningReturningLobby = false;
     PendingMatchPlayerCount = 0;
     bTravelCommitted = true;
+    PublishLobbyStartState(EDMLobbyStartState::Blocked);
     UE_LOG(LogDMLobbyGameMode, Error,
         TEXT("Lobby recovery stopped; match start remains locked. Leave the lobby; if Steam recovery is blocked, restart the game and Steam. Reason=%s"), Reason);
 }
@@ -963,6 +978,7 @@ void ADMLobbyGameMode::ReleaseMatchStartLock(const TCHAR* Reason)
 
     bRestoringLobbyStatus = false;
     bTravelCommitted = false;
+    PublishLobbyStartState(EDMLobbyStartState::Open);
     PendingMatchPlayerCount = 0;
     LobbyStatusRestoreAttemptCount = 0;
 

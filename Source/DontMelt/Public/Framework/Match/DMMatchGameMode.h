@@ -346,6 +346,7 @@ private:
      * Match가 Quest를 허용하지 않는 상태로
      * 전환될 때 Quest runtime을 정리한다.
      */
+    void EndPlayerEmotes();
     void ShutdownQuestSystem();
 
     /**

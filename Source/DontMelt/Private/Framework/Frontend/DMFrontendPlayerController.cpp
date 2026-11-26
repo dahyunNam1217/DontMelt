@@ -88,7 +88,6 @@ void ADMFrontendPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReas
     // 검색·참가·세션 정리 완료 이벤트를 해제한다.
     UnbindSteamJoinCompletion();
     SteamJoinOperation = ESteamJoinOperation::None;
-    PendingJoinFailureMessage.Reset();
 
     if (IsValid(MainMenuWidget.Get()))
     {
@@ -128,9 +127,9 @@ bool ADMFrontendPlayerController::HostLobby()
         return false;
     }
 
-    if (bHostSessionRequestPending)
+    if (bHostSessionRequestPending || SteamJoinOperation != ESteamJoinOperation::None)
     {
-        UE_LOG(LogDMFrontend, Verbose, TEXT("Host rejected: create request is pending."));
+        UE_LOG(LogDMFrontend, Verbose, TEXT("Host rejected: a frontend session request is pending."));
         return false;
     }
 
@@ -424,28 +423,53 @@ bool ADMFrontendPlayerController::JoinSteamLobby(const int32 ResultIndex)
         return false;
     }
 
-    SteamJoinOperation = ESteamJoinOperation::Join;
-    BoundSteamJoinSession = Session;
+    return StartSteamJoin(*Session, ResultIndex, nullptr);
+}
 
+bool ADMFrontendPlayerController::CanAcceptSteamInvite() const
+{
+    return IsLocalController() && SteamJoinOperation == ESteamJoinOperation::None
+        && !bHostSessionRequestPending && IsValid(MainMenuWidget.Get())
+        && MainMenuWidget->IsSteamInviteMenuActive();
+}
+
+bool ADMFrontendPlayerController::JoinInvitedSteamLobby(const FOnlineSessionSearchResult& Result)
+{
+    UDMGameInstance* Instance = Cast<UDMGameInstance>(GetGameInstance());
+    UDMOnlineSessionSubsystem* Session = IsValid(Instance) ? Instance->GetSubsystem<UDMOnlineSessionSubsystem>() : nullptr;
+    if (!IsValid(Session) || Instance->GetSteamInviteFrontend() != this || Session->IsBusy()
+        || Session->IsRecoveryBlocked() || Session->HasLocalLobbySession())
+    {
+        return false;
+    }
+
+    MainMenuWidget->ShowSteamInviteJoinPanel();
+    MainMenuWidget->SetSteamJoinBusy(true,
+        NSLOCTEXT("DMFrontend", "CheckingInviteLobby", "초대받은 로비를 확인하는 중입니다..."));
+    return StartSteamJoin(*Session, INDEX_NONE, &Result);
+}
+
+bool ADMFrontendPlayerController::StartSteamJoin(UDMOnlineSessionSubsystem& Session, const int32 ResultIndex,
+    const FOnlineSessionSearchResult* InviteResult)
+{
+    SteamJoinOperation = ESteamJoinOperation::Join;
+    BoundSteamJoinSession = &Session;
     SteamJoinDelegateHandle =
-        Session->OnJoinCompleted.AddUObject(this, &ADMFrontendPlayerController::HandleSteamJoinCompleted);
+        Session.OnJoinCompleted.AddUObject(this, &ADMFrontendPlayerController::HandleSteamJoinCompleted);
 
     if (IsValid(MainMenuWidget.Get()))
     {
-        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "JoiningSteamLobby", "Steam 로비 참가를 요청하는 중입니다..."));
+        MainMenuWidget->SetSteamJoinBusy(true,
+            NSLOCTEXT("DMFrontend", "JoiningSteamLobby", "Steam 로비에 참가하는 중입니다..."));
     }
 
-    UE_LOG(LogDMFrontend, Log, TEXT("Steam join requested. ResultIndex=%d"), ResultIndex);
-
-    const bool bStarted = Session->JoinLobbySession(ResultIndex);
-
-    if (!bStarted && SteamJoinOperation == ESteamJoinOperation::Join)
+    const bool bStarted = InviteResult
+        ? Session.JoinLobbySession(*InviteResult) : Session.JoinLobbySession(ResultIndex);
+    if (!bStarted && SteamJoinOperation == ESteamJoinOperation::Join && !Session.IsBusy())
     {
         UnbindSteamJoinCompletion();
-
-        StartSteamJoinFailureCleanup(TEXT("Steam 참가 요청을 시작하지 못했습니다."));
+        StartSteamJoinFailureCleanup(TEXT("Steam join did not start."));
     }
-
     return bStarted;
 }
 
@@ -494,6 +518,7 @@ void ADMFrontendPlayerController::RestoreMainMenuAfterNotice()
         MainMenuWidget->AddToViewport();
     }
 
+    SteamJoinOperation = ESteamJoinOperation::None;
     MainMenuWidget->ShowMainMenuPanelForRecovery();
 
     // BeginPlay와 같은 입력 설정을 다시 적용한다.
@@ -686,8 +711,8 @@ void ADMFrontendPlayerController::HandleSteamJoinCompleted(const bool bWasSucces
         return;
     }
 
-    // 세션 참가에 성공했으므로 로컬 Join 작업을 종료한다.
-    SteamJoinOperation = ESteamJoinOperation::None;
+    // 실제 접속은 로비 월드의 초기화 경로에서 완료된다.
+    SteamJoinOperation = ESteamJoinOperation::Connecting;
 
     if (!IsLocalController() || !IsValid(GetWorld()))
     {
@@ -699,7 +724,7 @@ void ADMFrontendPlayerController::HandleSteamJoinCompleted(const bool bWasSucces
 
     if (IsValid(MainMenuWidget.Get()))
     {
-        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "ConnectingSteamLobby", "Steam 로비에 연결하는 중입니다..."));
+        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "ConnectingSteamLobby", "호스트에 연결하는 중입니다..."));
     }
 
     // 접속 주소는 Online Subsystem이 해석한 문자열 그대로 사용한다.
@@ -708,7 +733,7 @@ void ADMFrontendPlayerController::HandleSteamJoinCompleted(const bool bWasSucces
 
 void ADMFrontendPlayerController::StartSteamJoinFailureCleanup(const FString& FailureMessage)
 {
-    PendingJoinFailureMessage = FailureMessage;
+    UE_LOG(LogDMFrontend, Warning, TEXT("Steam lobby join failed: %s"), *FailureMessage);
 
     UGameInstance* GameInstance = GetGameInstance();
 
@@ -728,6 +753,19 @@ void ADMFrontendPlayerController::StartSteamJoinFailureCleanup(const FString& Fa
         return;
     }
 
+    if (Session->IsRecoveryBlocked() || !Session->HasLocalLobbySession())
+    {
+        SteamJoinOperation = ESteamJoinOperation::None;
+        if (IsValid(MainMenuWidget.Get()))
+        {
+            MainMenuWidget->SetSteamSessionOptions(TArray<FString>());
+            MainMenuWidget->SetSteamJoinBusy(false, Session->IsRecoveryBlocked()
+                ? NSLOCTEXT("DMFrontend", "JoinRecoveryBlocked", "연결 정보를 복구하지 못했습니다. 게임을 다시 실행해 주세요.")
+                : NSLOCTEXT("DMFrontend", "JoinFailedRefresh", "참가에 실패했습니다. 목록을 새로고침한 뒤 다시 시도하세요."));
+        }
+        return;
+    }
+
     SteamJoinOperation = ESteamJoinOperation::Cleanup;
     BoundSteamJoinSession = Session;
 
@@ -736,7 +774,7 @@ void ADMFrontendPlayerController::StartSteamJoinFailureCleanup(const FString& Fa
 
     if (IsValid(MainMenuWidget.Get()))
     {
-        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "CleaningFailedJoin", "참가 실패. 로컬 세션을 정리하고 있습니다..."));
+        MainMenuWidget->SetSteamJoinBusy(true, NSLOCTEXT("DMFrontend", "CleaningFailedJoin", "연결 정보를 정리하는 중입니다..."));
     }
 
     const bool bStarted = Session->DestroyLobbySession();
@@ -774,14 +812,11 @@ void ADMFrontendPlayerController::HandleSteamJoinCleanupCompleted(const bool bWa
         // Destroy 성공 시 기존 검색 결과도 무효화되므로 목록을 비운다.
         MainMenuWidget->SetSteamSessionOptions(TArray<FString>());
 
-        const FString Message = bWasSuccessful
-            ? PendingJoinFailureMessage + TEXT(" 방 목록을 새로고침한 뒤 다시 시도하세요.")
-            : PendingJoinFailureMessage + TEXT(" 세션 정리에 실패했습니다. 게임을 재시작해야 할 수 있습니다.");
-
-        MainMenuWidget->SetSteamJoinBusy(false, FText::FromString(Message));
+        MainMenuWidget->SetSteamJoinBusy(false, bWasSuccessful
+            ? NSLOCTEXT("DMFrontend", "JoinFailedRefresh", "참가에 실패했습니다. 목록을 새로고침한 뒤 다시 시도하세요.")
+            : NSLOCTEXT("DMFrontend", "JoinRecoveryBlocked", "연결 정보를 복구하지 못했습니다. 게임을 다시 실행해 주세요."));
     }
 
-    PendingJoinFailureMessage.Reset();
 }
 
 void ADMFrontendPlayerController::UnbindSteamJoinCompletion()

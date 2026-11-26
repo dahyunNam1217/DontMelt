@@ -47,6 +47,11 @@ void UDMLobbyWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
+    if (IsValid(BTN_InviteFriends.Get()))
+    {
+        BTN_InviteFriends->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleInviteFriendsClicked);
+    }
+
     if (UDMGameInstance* GameInstance = Cast<UDMGameInstance>(GetGameInstance()))
     {
         GameInstance->BindCommonUIClickSound(this);
@@ -342,7 +347,15 @@ void UDMLobbyWidget::RefreshControls()
         bAllReady = false;
     }
 
-    const bool bCanStart = bIsHost && MinPlayers >= DMMatch::MinPlayers && MaxPlayers <= DMMatch::MaxPlayers
+    const EDMLobbyStartState StartState = bHasGameState
+        ? GameState->GetLobbyStartState() : EDMLobbyStartState::Recovering;
+    if (IsValid(BTN_InviteFriends.Get()))
+    {
+        BTN_InviteFriends->SetVisibility(bIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        BTN_InviteFriends->SetIsEnabled(bIsHost && IsValid(Controller) && Controller->CanInviteSteamFriends());
+    }
+
+    const bool bCanStart = bIsHost && StartState == EDMLobbyStartState::Open && MinPlayers >= DMMatch::MinPlayers && MaxPlayers <= DMMatch::MaxPlayers
         && MaxPlayers >= MinPlayers && PlayerCount >= MinPlayers && PlayerCount <= MaxPlayers && bAllReady;
 
     if (IsValid(BTN_StartMatch.Get()))
@@ -354,6 +367,25 @@ void UDMLobbyWidget::RefreshControls()
 
     if (IsValid(TXT_LobbyNotice.Get()))
     {
+        if (bHasGameState && bHasLocalPlayerState && MinPlayers > 0 && StartState != EDMLobbyStartState::Open)
+        {
+            FText StatusNotice;
+            switch (StartState)
+            {
+            case EDMLobbyStartState::Starting:
+                StatusNotice = NSLOCTEXT("DMLobby", "MatchStarting", "경기 시작을 준비하는 중입니다...");
+                break;
+            case EDMLobbyStartState::Blocked:
+                StatusNotice = NSLOCTEXT("DMLobby", "StartRecoveryBlocked", "로비를 복구할 수 없습니다. 로비에서 나가 주세요.");
+                break;
+            default:
+                StatusNotice = NSLOCTEXT("DMLobby", "LobbyRecovering", "로비 참가 상태를 복구하는 중입니다...");
+                break;
+            }
+            TXT_LobbyNotice->SetText(StatusNotice);
+            return;
+        }
+
         FString Notice;
 
         if (!bHasGameState || !bHasLocalPlayerState)
@@ -388,6 +420,16 @@ void UDMLobbyWidget::RefreshControls()
 #pragma endregion
 
 #pragma region Button Actions
+
+void UDMLobbyWidget::HandleInviteFriendsClicked()
+{
+    ADMLobbyPlayerController* Controller = BoundController.Get();
+    if ((!IsValid(Controller) || !Controller->ShowSteamFriendInvite()) && IsValid(TXT_LobbyNotice.Get()))
+    {
+        TXT_LobbyNotice->SetText(
+            NSLOCTEXT("DMLobby", "SteamInviteUnavailable", "Steam 친구 초대 창을 열 수 없습니다."));
+    }
+}
 
 void UDMLobbyWidget::HandleReadyClicked()
 {

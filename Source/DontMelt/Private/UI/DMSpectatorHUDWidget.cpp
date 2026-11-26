@@ -133,23 +133,23 @@ void UDMSpectatorHUDWidget::RefreshPresentation()
     {
     case EDMSpectatorPhase::Corpse:
 
-        PhaseText = NSLOCTEXT("DMSpectatorHUD", "CorpsePhase", "사망 지점 관전");
+        PhaseText = NSLOCTEXT("DMSpectatorHUD", "CorpsePhase", "누군가 당신을 녹여버림");
 
-        HintText = NSLOCTEXT("DMSpectatorHUD", "CorpseHint", "쓰러진 위치를 보여줍니다.");
+        HintText = NSLOCTEXT("DMSpectatorHUD", "CorpseHint", "곧 범인 공개");
         break;
 
     case EDMSpectatorPhase::KillerView:
 
-        PhaseText = NSLOCTEXT("DMSpectatorHUD", "KillerPhase", "공격자 관찰 구간");
+        PhaseText = NSLOCTEXT("DMSpectatorHUD", "KillerPhase", "범인 훔쳐보는 중");
 
-        HintText = NSLOCTEXT("DMSpectatorHUD", "KillerHint", "공격자를 볼 수 없으면 사망 지점으로 전환됩니다.");
+        HintText = NSLOCTEXT("DMSpectatorHUD", "KillerHint", "범인을 볼 수 없으면 사망지점으로 전환됩니다");
         break;
 
     case EDMSpectatorPhase::FreeCamera:
 
-        PhaseText = NSLOCTEXT("DMSpectatorHUD", "FreeCameraPhase", "자유 카메라");
+        PhaseText = NSLOCTEXT("DMSpectatorHUD", "FreeCameraPhase", "마을 훔쳐보기");
 
-        HintText = NSLOCTEXT("DMSpectatorHUD", "FreeCameraHint", "WASD 이동 · 마우스로 시점 변경");
+        HintText = NSLOCTEXT("DMSpectatorHUD", "FreeCameraHint", "wasd로 카메라 이동 · 마우스로 시점변경");
         break;
 
     default:

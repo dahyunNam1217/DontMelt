@@ -2,6 +2,18 @@
 #include "Online/DMOnlineSessionSubsystem.h"
 
 #include "Core/DMMatchConstants.h"
+#include "Core/DMGameInstance.h"
+#include "Framework/Frontend/DMFrontendPlayerController.h"
+#include "Interfaces/OnlineExternalUIInterface.h"
+#include "Interfaces/OnlineIdentityInterface.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
+#if PLATFORM_WINDOWS
+THIRD_PARTY_INCLUDES_START
+#include "steam/steam_api.h"
+THIRD_PARTY_INCLUDES_END
+#endif
 
 #include "Engine/GameInstance.h"
 #include "TimerManager.h"
@@ -130,11 +142,46 @@ void UDMOnlineSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
 
+    // 초기 실행 초대를 재현하지 않고, Steam이 전달하는 해당 로비 결과만 제외한다.
+    const FString LaunchArguments(FCommandLine::Get());
+    const FString LobbyArgument(TEXT("+connect_lobby"));
+    const int32 LobbyArgumentIndex = LaunchArguments.Find(LobbyArgument, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+    if (LobbyArgumentIndex != INDEX_NONE)
+    {
+        const TCHAR* LobbyArgumentValue = *LaunchArguments + LobbyArgumentIndex + LobbyArgument.Len();
+        const FString StartupLobbyToken = FParse::Token(LobbyArgumentValue, false);
+        const uint64 StartupLobby = FCString::Strtoui64(*StartupLobbyToken, nullptr, 10);
+        if (StartupLobby != 0)
+        {
+            StartupInviteLobbyId = LexToString(StartupLobby);
+        }
+    }
+
+    InviteSessionInterface = GetSteamSessionInterface();
+    if (InviteSessionInterface.IsValid() && !InviteAcceptedHandle.IsValid())
+    {
+        InviteAcceptedHandle = InviteSessionInterface->AddOnSessionUserInviteAcceptedDelegate_Handle(
+            FOnSessionUserInviteAcceptedDelegate::CreateUObject(this, &ThisClass::HandleInviteAccepted));
+    }
+    else if (!InviteSessionInterface.IsValid())
+    {
+        UE_LOG(LogDMOnlineSession, Warning, TEXT("Steam invite handling is unavailable: no session interface."));
+    }
+
     UE_LOG(LogDMOnlineSession, Log, TEXT("Online Session Subsystem initialized."));
 }
 
 void UDMOnlineSessionSubsystem::Deinitialize()
 {
+    if (InviteSessionInterface.IsValid() && InviteAcceptedHandle.IsValid())
+    {
+        InviteSessionInterface->ClearOnSessionUserInviteAcceptedDelegate_Handle(InviteAcceptedHandle);
+    }
+    InviteAcceptedHandle.Reset();
+    InviteSessionInterface.Reset();
+    StartupInviteLobbyId.Reset();
+    LastAcceptedInviteLobbyId.Reset();
+
     ClearOperationTimeout();
 
     ClearActiveDelegate();
@@ -207,6 +254,7 @@ bool UDMOnlineSessionSubsystem::CreateLobbySession(const int32 MaxPlayers)
     // 로비에서는 참가를 허용한다. 경기 시작 시 변경한다.
     Settings.bAllowJoinInProgress = true;
     Settings.bAllowJoinViaPresence = true;
+    Settings.bAllowInvites = true;
 
     Settings.NumPublicConnections = MaxPlayers;
     Settings.NumPrivateConnections = 0;
@@ -298,46 +346,31 @@ bool UDMOnlineSessionSubsystem::FindLobbySessions()
 
 bool UDMOnlineSessionSubsystem::JoinLobbySession(const int32 ResultIndex)
 {
-    if (RejectBlockedOperation(EOperation::Join))
+    if (!SessionSearch.IsValid() || !VisibleResultIndices.IsValidIndex(ResultIndex))
     {
-        return false;
-    }
-
-    if (IsBusy())
-    {
-        UE_LOG(LogDMOnlineSession, Verbose, TEXT("Join rejected: another operation is active."));
-        return false;
-    }
-
-    if (!VisibleResultIndices.IsValidIndex(ResultIndex) || !SessionSearch.IsValid())
-    {
-        UE_LOG(LogDMOnlineSession, Warning, TEXT("Invalid session result index: %d"), ResultIndex);
-        return false;
-    }
-
-    IOnlineSessionPtr Sessions = GetSteamSessionInterface();
-
-    if (!Sessions.IsValid())
-    {
-        OnJoinCompleted.Broadcast(false, TEXT("Steam 세션 인터페이스를 찾을 수 없습니다."));
-        return false;
-    }
-
-    if (Sessions->GetNamedSession(DMSessionName) != nullptr)
-    {
-        OnJoinCompleted.Broadcast(false, TEXT("기존 세션을 먼저 종료해야 합니다."));
         return false;
     }
 
     const int32 SourceIndex = VisibleResultIndices[ResultIndex];
+    return SessionSearch->SearchResults.IsValidIndex(SourceIndex)
+        && JoinLobbySession(SessionSearch->SearchResults[SourceIndex]);
+}
 
-    if (!SessionSearch->SearchResults.IsValidIndex(SourceIndex))
+bool UDMOnlineSessionSubsystem::JoinLobbySession(const FOnlineSessionSearchResult& Result)
+{
+    if (RejectBlockedOperation(EOperation::Join) || IsBusy())
     {
         return false;
     }
 
-    // Steam 검색 결과를 복사하여 참가에 필요한 세션 설정을 보정한다.
-    FOnlineSessionSearchResult SearchResult = SessionSearch->SearchResults[SourceIndex];
+    IOnlineSessionPtr Sessions = GetSteamSessionInterface();
+    if (!Sessions.IsValid() || Sessions->GetNamedSession(DMSessionName) != nullptr)
+    {
+        OnJoinCompleted.Broadcast(false, TEXT("Steam session unavailable or a local session already exists."));
+        return false;
+    }
+
+    FOnlineSessionSearchResult SearchResult = Result;
 
     // 검색된 로비의 프로젝트·상태·버전·정원을 검사한다.
     if (!IsCompatibleOpenLobby(SearchResult))
@@ -362,8 +395,7 @@ bool UDMOnlineSessionSubsystem::JoinLobbySession(const int32 ResultIndex)
         SearchResult.Session.SessionSettings.bUseLobbiesIfAvailable ? 1 : 0
     );
 
-    // 참가 완료 콜백에서 검색 원본을 참조할 수 있도록 인덱스를 보관한다.
-    PendingJoinSourceIndex = SourceIndex;
+    PendingJoinResult = MakeShared<FOnlineSessionSearchResult>(Result);
 
     JoinedConnectString.Reset();
     BeginOperation(EOperation::Join);
@@ -378,12 +410,92 @@ bool UDMOnlineSessionSubsystem::JoinLobbySession(const int32 ResultIndex)
 
     if (!bStarted && CurrentOperation == EOperation::Join)
     {
-        PendingJoinSourceIndex = INDEX_NONE;
+        PendingJoinResult.Reset();
 
         BeginRecoveryDestroy(TEXT("Steam 세션 참가 요청을 시작하지 못했습니다."));
     }
 
     return bStarted;
+}
+
+void UDMOnlineSessionSubsystem::HandleInviteAccepted(
+    const bool bSuccess, const int32 LocalUserNum, FUniqueNetIdPtr UserId,
+    const FOnlineSessionSearchResult& Result)
+{
+    const FString LobbyId = Result.GetSessionIdStr();
+    if (!StartupInviteLobbyId.IsEmpty() && LobbyId == StartupInviteLobbyId)
+    {
+        StartupInviteLobbyId.Reset();
+        UE_LOG(LogDMOnlineSession, Log, TEXT("Ignoring the Steam lobby invite associated with process launch."));
+        return;
+    }
+
+    IOnlineSubsystem* Steam = IOnlineSubsystem::Get(FName(TEXT("STEAM")));
+    const IOnlineIdentityPtr Identity = Steam ? Steam->GetIdentityInterface() : nullptr;
+    const FUniqueNetIdPtr LocalId = Identity.IsValid() && LocalUserNum == 0
+        ? Identity->GetUniquePlayerId(LocalUserNum) : nullptr;
+    UDMGameInstance* Instance = Cast<UDMGameInstance>(GetGameInstance());
+    ADMFrontendPlayerController* Frontend = IsValid(Instance) ? Instance->GetSteamInviteFrontend() : nullptr;
+    const double Now = FPlatformTime::Seconds();
+    const bool bDuplicate = LobbyId == LastAcceptedInviteLobbyId && Now - LastAcceptedInviteTime < 2.0;
+    if (!bSuccess || !UserId.IsValid() || !UserId->IsValid() || !LocalId.IsValid() || !LocalId->IsValid()
+        || *UserId != *LocalId || !IsValid(Frontend) || IsBusy() || IsRecoveryBlocked()
+        || HasLocalLobbySession() || LobbyId.IsEmpty() || bDuplicate
+        || !IsCompatibleOpenLobby(Result))
+    {
+        UE_LOG(LogDMOnlineSession, Log, TEXT("Steam invite ignored: unavailable, duplicate, or incompatible."));
+        return;
+    }
+
+    if (Frontend->JoinInvitedSteamLobby(Result))
+    {
+        LastAcceptedInviteLobbyId = LobbyId;
+        LastAcceptedInviteTime = Now;
+    }
+}
+
+bool UDMOnlineSessionSubsystem::CanInviteToHostedLobby() const
+{
+#if PLATFORM_WINDOWS
+    IOnlineSubsystem* Steam = IOnlineSubsystem::Get(FName(TEXT("STEAM")));
+    const IOnlineSessionPtr Sessions = Steam ? Steam->GetSessionInterface() : nullptr;
+    const FNamedOnlineSession* Named = Sessions.IsValid() ? Sessions->GetNamedSession(DMSessionName) : nullptr;
+    if (IsBusy() || IsRecoveryBlocked() || Named == nullptr
+        || !Named->SessionInfo.IsValid() || !Named->SessionInfo->IsValid())
+    {
+        return false;
+    }
+
+    // Steam은 생성한 로비에 소유자 ID를 기록한다.
+    const IOnlineIdentityPtr Identity = Steam->GetIdentityInterface();
+    const FUniqueNetIdPtr LocalId = Identity.IsValid() ? Identity->GetUniquePlayerId(0) : nullptr;
+    if (!LocalId.IsValid() || !LocalId->IsValid() || !Named->OwningUserId.IsValid()
+        || *LocalId != *Named->OwningUserId)
+    {
+        return false;
+    }
+
+    const FOnlineSessionSettings& Settings = Named->SessionSettings;
+    FString Status;
+    return Settings.bAllowInvites && Settings.bUsesPresence && Settings.bUseLobbiesIfAvailable
+        && Settings.bAllowJoinViaPresence && Settings.bAllowJoinInProgress && Settings.bShouldAdvertise
+        && Settings.Get(DMLobbyStatusKey, Status) && Status == DMLobbyOpenValue
+        && Steam->GetExternalUIInterface().IsValid() && SteamUtils() && SteamUtils()->IsOverlayEnabled();
+#else
+    return false;
+#endif
+}
+
+bool UDMOnlineSessionSubsystem::ShowHostedLobbyInviteUI(const int32 LocalUserNum) const
+{
+    if (!CanInviteToHostedLobby())
+    {
+        return false;
+    }
+
+    IOnlineSubsystem* Steam = IOnlineSubsystem::Get(FName(TEXT("STEAM")));
+    const IOnlineExternalUIPtr ExternalUI = Steam ? Steam->GetExternalUIInterface() : nullptr;
+    return ExternalUI.IsValid() && ExternalUI->ShowInviteUI(LocalUserNum, DMSessionName);
 }
 
 bool UDMOnlineSessionSubsystem::DestroyLobbySession()
@@ -481,6 +593,7 @@ bool UDMOnlineSessionSubsystem::UpdateLobbyMatchStarting(const bool bStarting)
     // 새 Steam Join은 Starting과 매치 진행 중 허용하지 않는다.
     PendingUpdateSettings->bAllowJoinInProgress = !bStarting;
     PendingUpdateSettings->bAllowJoinViaPresence = !bStarting;
+    PendingUpdateSettings->bAllowInvites = !bStarting;
 
     // 비동기 작업 상태와 완료 콜백을 먼저 등록한다.
     BeginOperation(EOperation::Update);
@@ -856,12 +969,7 @@ void UDMOnlineSessionSubsystem::HandleJoinComplete(
     else
     {
         // Named Session의 주소 확인이 실패한 경우 검색 원본을 검사한다.
-        const bool bSearchResultExists =
-            SessionSearch.IsValid() && SessionSearch->SearchResults.IsValidIndex(PendingJoinSourceIndex);
-
-        const FOnlineSessionSearchResult* OriginalResult =
-            bSearchResultExists ? &SessionSearch->SearchResults[PendingJoinSourceIndex] : nullptr;
-
+        const FOnlineSessionSearchResult* OriginalResult = PendingJoinResult.Get();
         const bool bSearchSessionInfoValid = OriginalResult != nullptr && OriginalResult->Session.SessionInfo.IsValid()
             && OriginalResult->Session.SessionInfo->IsValid();
 
@@ -869,7 +977,7 @@ void UDMOnlineSessionSubsystem::HandleJoinComplete(
             LogDMOnlineSession,
             Log,
             TEXT("Steam Join fallback diagnosis: SearchResult=%d, SearchInfoValid=%d"),
-            bSearchResultExists ? 1 : 0,
+            OriginalResult != nullptr ? 1 : 0,
             bSearchSessionInfoValid ? 1 : 0
         );
 
@@ -893,7 +1001,7 @@ void UDMOnlineSessionSubsystem::HandleJoinComplete(
         }
     }
 
-    PendingJoinSourceIndex = INDEX_NONE;
+    PendingJoinResult.Reset();
 
     if (ResolvedAddress.IsEmpty())
     {
@@ -1054,7 +1162,7 @@ void UDMOnlineSessionSubsystem::CompleteOperation(const bool bWasSuccessful, con
 
     if (FinishedOperation == EOperation::Join)
     {
-        PendingJoinSourceIndex = INDEX_NONE;
+        PendingJoinResult.Reset();
         if (!bWasSuccessful)
         {
             // 이전 방 목록을 이용한 중복 참가를 방지한다.
@@ -1129,7 +1237,7 @@ void UDMOnlineSessionSubsystem::ResetCachedSessionData()
     VisibleResultIndices.Reset();
     JoinedConnectString.Reset();
     // 이전 참가 요청의 검색 결과 인덱스를 초기화한다.
-    PendingJoinSourceIndex = INDEX_NONE;
+    PendingJoinResult.Reset();
 }
 
 void UDMOnlineSessionSubsystem::StartOperationTimeout()

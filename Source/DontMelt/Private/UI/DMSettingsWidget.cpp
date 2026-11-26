@@ -595,7 +595,7 @@ void UDMSettingsWidget::ShowCategory(int32 PageIndex)
 
     case 4:
         TXT_SettingsNotice->SetText(
-            NSLOCTEXT("DMSettings", "VoiceModeHelp", "음성 모드: PTT는 V키로 송신 전환, 음성 감지는 M키로 음소거 전환")
+            NSLOCTEXT("DMSettings", "VoiceModeHelp", "눌러서 말하기: V를 누르는 동안 송신 / 음성 감지: M으로 마이크 음소거 전환")
         );
         break;
 

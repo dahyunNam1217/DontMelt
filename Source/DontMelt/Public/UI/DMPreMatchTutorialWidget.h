@@ -6,7 +6,9 @@
 #include "DMPreMatchTutorialWidget.generated.h"
 
 class UButton;
+class UImage;
 class UTextBlock;
+class UTexture2D;
 
 DECLARE_MULTICAST_DELEGATE(FDMOnPreMatchTutorialCompleted);
 
@@ -51,11 +53,15 @@ protected:
     TObjectPtr<UTextBlock> TXT_NextButton = nullptr;
     UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UTextBlock> TXT_Waiting = nullptr;
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UImage> IMG_PageImage = nullptr;
 
     UPROPERTY(EditDefaultsOnly, Category = "DM|Tutorial")
     TArray<FText> TutorialPageTitles;
     UPROPERTY(EditDefaultsOnly, Category = "DM|Tutorial")
     TArray<FText> TutorialPageDescriptions;
+    UPROPERTY(EditDefaultsOnly, Category = "DM|Tutorial")
+    TArray<TObjectPtr<UTexture2D>> TutorialPageImages;
     UPROPERTY(EditDefaultsOnly, Category = "DM|Tutorial", meta = (ClampMin = "0.2", UIMin = "0.2"))
     float SkipHoldSeconds = 1.0f;
 

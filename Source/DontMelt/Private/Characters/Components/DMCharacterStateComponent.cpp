@@ -7,6 +7,7 @@
 #include "Characters/Components/DMCharacterAudioComponent.h"
 #include "Characters/Components/DMCharacterVFXComponent.h"
 #include "Characters/DMJellyCharacterBase.h"
+#include "Characters/DMPlayerCharacter.h"
 
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -79,9 +80,7 @@ bool UDMCharacterStateComponent::CanPerformAction(const EDMActionRequest ActionR
     /*
      * Move / Sprint / Jump는 주요 ActionState 자체가 아니다.
      *
-     * 기획에서 이동 금지가 명확한
-     * Interact / FakeDeath에 대해서만
-     * 현재 이동 입력을 차단한다.
+     * Interact, FakeDeath, 지속형 Emote 중에는 이동 입력을 차단한다.
      *
      * Attack / Defense 중 이동 가능 여부는
      * 아직 기획상 확정되지 않았으므로
@@ -93,7 +92,8 @@ bool UDMCharacterStateComponent::CanPerformAction(const EDMActionRequest ActionR
     case EDMActionRequest::Sprint:
     case EDMActionRequest::Jump:
 
-        return ActionState != EDMActionState::Interact && ActionState != EDMActionState::FakeDeath;
+        return ActionState != EDMActionState::Interact && ActionState != EDMActionState::FakeDeath
+            && ActionState != EDMActionState::Emote;
 
     default:
         break;
@@ -230,6 +230,15 @@ void UDMCharacterStateComponent::RequestBeginEmote_Implementation(const FName Em
     if (!CanRequestEmote(EmoteId))
     {
         return;
+    }
+
+    if (const ADMPlayerCharacter* Player = Cast<ADMPlayerCharacter>(OwnerActor))
+    {
+        if (!Player->IsEmoteGameplayAllowed() || !Player->IsRadialEmoteAllowed(EmoteId)
+            || !Player->GetCharacterMovement()->IsMovingOnGround())
+        {
+            return;
+        }
     }
 
     if (!TryBeginAction(EDMActionState::Emote))
@@ -369,6 +378,7 @@ bool UDMCharacterStateComponent::ApplyTimedStatus(const FGameplayTag& StatusTag,
 
     if (StatusTag.MatchesTagExact(DMGameplayTags::Status_Stunned))
     {
+        EndAction(EDMActionState::Emote);
         ADMJellyCharacterBase* OwnerCharacter = Cast<ADMJellyCharacterBase>(OwnerActor);
 
         if (OwnerCharacter != nullptr)
@@ -581,6 +591,14 @@ void UDMCharacterStateComponent::ApplyStunPresentation()
     if (!IsValid(OwnerCharacter))
     {
         return;
+    }
+
+    if (bStunPresentationActive)
+    {
+        if (ADMPlayerCharacter* Player = Cast<ADMPlayerCharacter>(OwnerCharacter))
+        {
+            Player->CancelEmoteWheel();
+        }
     }
 
     UDMCharacterVFXComponent* VFXComponent = OwnerCharacter->GetCharacterVFXComponent();
